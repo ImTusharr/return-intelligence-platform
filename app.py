@@ -1,5 +1,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
+import logging
 import os
 import re
 import uuid
@@ -17,6 +19,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     send_from_directory,
     url_for,
 )
@@ -27,6 +30,7 @@ from flask_login import (
     logout_user,
 )
 from sqlalchemy import case, func, or_, select
+from supabase import create_client
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
@@ -34,6 +38,84 @@ from ai_analysis import analyze_return_request
 from config import Config
 from extensions import csrf, db, login_manager
 from models import ReturnImage, ReturnRequest, User
+
+
+# ---------------------------------------------------------
+# SUPABASE STORAGE
+# ---------------------------------------------------------
+
+_supabase_client = None
+
+
+def get_supabase_client():
+    """Create the Supabase client only when it is needed."""
+    global _supabase_client
+
+    if _supabase_client is None:
+        supabase_url = os.environ.get("SUPABASE_URL")
+        service_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+
+        if not supabase_url or not service_key:
+            raise RuntimeError(
+                "Supabase Storage configuration is missing. "
+                "Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY."
+            )
+
+        _supabase_client = create_client(
+            supabase_url,
+            service_key,
+        )
+
+    return _supabase_client
+
+
+def get_storage_bucket():
+    bucket = os.environ.get(
+        "SUPABASE_STORAGE_BUCKET",
+        "return-images",
+    ).strip()
+
+    if not bucket:
+        raise RuntimeError("SUPABASE_STORAGE_BUCKET is missing.")
+
+    return bucket
+
+
+def upload_to_supabase(storage_name, file_bytes, mime_type):
+    """Upload a new image to the private Supabase bucket."""
+    return (
+        get_supabase_client()
+        .storage
+        .from_(get_storage_bucket())
+        .upload(
+            storage_name,
+            file_bytes,
+            {
+                "content-type": mime_type,
+                "upsert": "false",
+            },
+        )
+    )
+
+
+def delete_from_supabase(storage_name):
+    """Delete an uploaded object when a database transaction fails."""
+    return (
+        get_supabase_client()
+        .storage
+        .from_(get_storage_bucket())
+        .remove([storage_name])
+    )
+
+
+def download_from_supabase(storage_name):
+    """Download an image from the private bucket."""
+    return (
+        get_supabase_client()
+        .storage
+        .from_(get_storage_bucket())
+        .download(storage_name)
+    )
 
 
 # ---------------------------------------------------------
@@ -230,6 +312,12 @@ def create_app():
     # -----------------------------------------------------
 
     def save_image(upload, image_type):
+        """
+        Validate the uploaded image, save a local cache copy,
+        upload it to Supabase, and create its database record.
+
+        The caller commits the database transaction.
+        """
         if not upload or not upload.filename:
             raise ValueError("One of the required images is missing.")
 
@@ -285,28 +373,46 @@ def create_app():
         extension, mime_type = IMAGE_FORMATS[image_format]
         storage_name = f"{uuid.uuid4().hex}.{extension}"
 
-        destination = os.path.join(
-            current_app.config["UPLOAD_FOLDER"],
-            storage_name,
-        )
+        upload_folder = current_app.config["UPLOAD_FOLDER"]
+        destination = os.path.join(upload_folder, storage_name)
 
         try:
+            # Save a local copy first. The AI model can use this copy
+            # immediately without needing to download it again.
             upload.stream.seek(0)
             upload.save(destination)
 
-        except (OSError, ValueError):
-            if os.path.exists(destination):
-                try:
+            with open(destination, "rb") as image_file:
+                image_bytes = image_file.read()
+
+            # Persistent storage in Supabase.
+            upload_to_supabase(
+                storage_name,
+                image_bytes,
+                mime_type,
+            )
+
+        except Exception as error:
+            # If storage upload failed, do not leave an incomplete
+            # image that looks like a successfully saved submission.
+            try:
+                if os.path.exists(destination):
                     os.remove(destination)
-                except OSError:
-                    current_app.logger.warning(
-                        "Could not remove incomplete image: %s",
-                        destination,
-                    )
+            except OSError:
+                current_app.logger.warning(
+                    "Could not remove incomplete image: %s",
+                    destination,
+                )
+
+            current_app.logger.exception(
+                "Could not save image %s to Supabase Storage.",
+                storage_name,
+            )
 
             raise ValueError(
-                "The uploaded image could not be saved."
-            ) from None
+                "The image could not be saved to cloud storage. "
+                "Please try again."
+            ) from error
 
         image_record = ReturnImage(
             image_type=image_type,
@@ -318,15 +424,29 @@ def create_app():
         return image_record, destination
 
     def remove_saved_files(paths):
-        """Remove uploaded files when the database transaction fails."""
+        """
+        Roll back local cache files and Supabase objects when
+        a return request's database transaction fails.
+        """
         for path in paths:
+            storage_name = os.path.basename(path)
+
             try:
-                if os.path.exists(path):
+                if os.path.isfile(path):
                     os.remove(path)
             except OSError:
                 current_app.logger.warning(
-                    "Could not remove uploaded file: %s",
+                    "Could not remove local image: %s",
                     path,
+                )
+
+            try:
+                delete_from_supabase(storage_name)
+            except Exception:
+                # Do not hide the original database error.
+                current_app.logger.exception(
+                    "Could not roll back Supabase image %s.",
+                    storage_name,
                 )
 
     # -----------------------------------------------------
@@ -336,8 +456,7 @@ def create_app():
     def retrieve_similar_verified_cases(return_request, limit=3):
         """
         Retrieve earlier staff-verified cases as contextual examples.
-        The current case and cases created after it are excluded to reduce
-        information leakage when old cases are retried.
+        Exclude the current case and cases created after it.
         """
         if return_request is None:
             return []
@@ -356,64 +475,104 @@ def create_app():
         )
 
         current_created_at = getattr(return_request, "created_at", None)
+
         if current_created_at is not None:
-            query = query.where(ReturnRequest.created_at < current_created_at)
+            query = query.where(
+                ReturnRequest.created_at < current_created_at
+            )
 
         candidates = db.session.execute(
-            query.order_by(ReturnRequest.created_at.desc()).limit(300)
+            query.order_by(
+                ReturnRequest.created_at.desc()
+            ).limit(300)
         ).all()
 
         def tokens(value):
             return {
-                word for word in re.findall(r"[a-z0-9]+", (value or "").lower())
+                word
+                for word in re.findall(
+                    r"[a-z0-9]+",
+                    (value or "").lower(),
+                )
                 if len(word) > 2
             }
 
-        current_product = tokens(getattr(return_request, "product_name", ""))
-        current_comment = tokens(getattr(return_request, "reason_comment", ""))
-        current_reason = (getattr(return_request, "selected_reason", "") or "").strip()
+        current_product = tokens(
+            getattr(return_request, "product_name", "")
+        )
+        current_comment = tokens(
+            getattr(return_request, "reason_comment", "")
+        )
+        current_reason = (
+            getattr(return_request, "selected_reason", "") or ""
+        ).strip()
 
         ranked = []
+
         for candidate_request, candidate_analysis in candidates:
-            past_product = tokens(getattr(candidate_request, "product_name", ""))
-            past_comment = tokens(getattr(candidate_request, "reason_comment", ""))
+            past_product = tokens(candidate_request.product_name or "")
+            past_comment = tokens(candidate_request.reason_comment or "")
+
             same_selected_reason = (
                 current_reason
                 and current_reason == (candidate_request.selected_reason or "")
             )
 
+            product_union = current_product | past_product
+            comment_union = current_comment | past_comment
+
             product_overlap = (
-                len(current_product & past_product) / len(current_product | past_product)
-                if current_product | past_product else 0.0
-            )
-            comment_overlap = (
-                len(current_comment & past_comment) / len(current_comment | past_comment)
-                if current_comment | past_comment else 0.0
+                len(current_product & past_product) / len(product_union)
+                if product_union else 0.0
             )
 
-            # Product/comment similarity is preferred; same selected reason
-            # is a smaller signal and never treated as verified truth.
-            score = (product_overlap * 0.50) + (comment_overlap * 0.35)
+            comment_overlap = (
+                len(current_comment & past_comment) / len(comment_union)
+                if comment_union else 0.0
+            )
+
+            score = (
+                product_overlap * 0.50
+                + comment_overlap * 0.35
+            )
+
             if same_selected_reason:
                 score += 0.15
 
             if score <= 0:
                 continue
 
-            ranked.append((score, candidate_request, candidate_analysis))
+            ranked.append(
+                (score, candidate_request, candidate_analysis)
+            )
 
-        ranked.sort(key=lambda item: (item[0], item[1].created_at), reverse=True)
+        ranked.sort(
+            key=lambda item: (
+                item[0],
+                item[1].created_at,
+            ),
+            reverse=True,
+        )
 
         similar_cases = []
+
         for score, past_request, past_analysis in ranked[:limit]:
             similar_cases.append({
                 "case_id": past_request.id,
                 "product_name": (past_request.product_name or "")[:200],
-                "customer_selected_reason": past_request.selected_reason or "",
-                "customer_comment": (past_request.reason_comment or "")[:700],
-                "staff_verified_reason": past_analysis.verified_reason or "",
+                "customer_selected_reason": (
+                    past_request.selected_reason or ""
+                ),
+                "customer_comment": (
+                    past_request.reason_comment or ""
+                )[:700],
+                "staff_verified_reason": (
+                    past_analysis.verified_reason or ""
+                ),
                 "review_status": past_analysis.review_status or "",
-                "reviewer_notes": (past_analysis.reviewer_notes or "")[:500],
+                "reviewer_notes": (
+                    past_analysis.reviewer_notes or ""
+                )[:500],
                 "similarity_score": round(score, 3),
             })
 
@@ -456,7 +615,9 @@ def create_app():
                     db.session.add(analysis)
                     db.session.commit()
 
-                similar_cases = retrieve_similar_verified_cases(return_request)
+                similar_cases = retrieve_similar_verified_cases(
+                    return_request
+                )
 
                 result = analyze_return_request(
                     return_request=return_request,
@@ -501,6 +662,8 @@ def create_app():
                     "model_version", "Unknown"
                 )
 
+                # Do not overwrite the customer's selected reason
+                # or the staff's verified reason.
                 return_request.analysis_status = "Analyzed"
                 db.session.commit()
 
@@ -725,12 +888,10 @@ def create_app():
         selected_review = request.args.get("review", "").strip()
         selected_mismatch = request.args.get("mismatch", "").strip()
 
-        # Overall request count
         total_requests = db.session.scalar(
             select(func.count()).select_from(ReturnRequest)
         ) or 0
 
-        # Analysis status counts
         status_counts = {}
 
         for status in ANALYSIS_STATUSES:
@@ -742,7 +903,6 @@ def create_app():
                 .where(ReturnRequest.analysis_status == status)
             ) or 0
 
-        # Unique customers and products
         customer_count = db.session.scalar(
             select(func.count(func.distinct(ReturnRequest.user_id)))
         ) or 0
@@ -751,12 +911,7 @@ def create_app():
             select(func.count(func.distinct(ReturnRequest.product_id)))
         ) or 0
 
-        # -------------------------------------------------
-        # CUSTOMER-SELECTED REASONS
-        # Always return all eight categories in fixed order.
-        # Categories with no requests receive a count of zero.
-        # -------------------------------------------------
-
+        # Customer-selected return reason counts.
         customer_reason_counts = {
             reason: 0 for reason in RETURN_REASONS
         }
@@ -774,16 +929,12 @@ def create_app():
                 customer_reason_counts[reason] = count
 
         reason_labels = list(RETURN_REASONS)
-
         reason_values = [
             customer_reason_counts[reason]
             for reason in reason_labels
         ]
 
-        # -------------------------------------------------
-        # EVIDENCE-STRENGTH COUNTS
-        # -------------------------------------------------
-
+        # Evidence strength counts.
         evidence_counts = {}
 
         for level in EVIDENCE_LEVELS:
@@ -795,10 +946,7 @@ def create_app():
                 .where(ReturnAnalysis.evidence_strength == level)
             ) or 0
 
-        # -------------------------------------------------
-        # STAFF REVIEW COUNTS
-        # -------------------------------------------------
-
+        # Staff review counts.
         reviewed_count = db.session.scalar(
             select(func.count())
             .select_from(ReturnAnalysis)
@@ -815,43 +963,12 @@ def create_app():
             .where(ReturnAnalysis.review_status == "Corrected")
         ) or 0
 
-        # -------------------------------------------------
-        # CUSTOMER VS STAFF REASON COMPARISON
-        # Both datasets use the same eight categories.
-        #
-        # Customer counts include all submitted requests.
-        # Staff counts include completed reviews with a verified
-        # reason and Reviewed or Corrected review status.
-        # -------------------------------------------------
-
-               # -------------------------------------------------
-        # CUSTOMER VS STAFF REASON COMPARISON
-        # Blue: all customer selections for each reason.
-        # Orange: only cases where staff confirmed that
-        # same reason for that same return request.
-        # -------------------------------------------------
-
+        # Customer versus staff reason comparison.
         comparison_labels = list(RETURN_REASONS)
-
-        customer_reason_counts = {
-            reason: 0 for reason in comparison_labels
-        }
 
         staff_reason_counts = {
             reason: 0 for reason in comparison_labels
         }
-
-        customer_reason_rows = db.session.execute(
-            select(
-                ReturnRequest.selected_reason,
-                func.count(ReturnRequest.id),
-            )
-            .group_by(ReturnRequest.selected_reason)
-        ).all()
-
-        for reason, count in customer_reason_rows:
-            if reason in customer_reason_counts:
-                customer_reason_counts[reason] = count
 
         confirmed_match_rows = db.session.execute(
             select(
@@ -860,8 +977,7 @@ def create_app():
             )
             .join(
                 ReturnAnalysis,
-                ReturnAnalysis.return_request_id
-                == ReturnRequest.id,
+                ReturnAnalysis.return_request_id == ReturnRequest.id,
             )
             .where(
                 ReturnAnalysis.verified_reason.is_not(None),
@@ -878,19 +994,14 @@ def create_app():
             if reason in staff_reason_counts:
                 staff_reason_counts[reason] = count
 
-        customer_comparison_values = [
-            customer_reason_counts[reason]
-            for reason in comparison_labels
-        ]
+        customer_comparison_values = list(reason_values)
 
         staff_comparison_values = [
             staff_reason_counts[reason]
             for reason in comparison_labels
         ]
-        # -------------------------------------------------
-        # CUSTOMER VS STAFF MISMATCH COUNT
-        # -------------------------------------------------
 
+        # Customer and staff reason mismatch count.
         mismatch_count = db.session.scalar(
             select(func.count())
             .select_from(ReturnRequest)
@@ -908,10 +1019,7 @@ def create_app():
             )
         ) or 0
 
-        # -------------------------------------------------
-        # RETURN CASES TABLE
-        # -------------------------------------------------
-
+        # Return cases, ordered to prioritize weak evidence.
         cases_query = (
             select(ReturnRequest)
             .outerjoin(
@@ -932,7 +1040,6 @@ def create_app():
             )
         )
 
-        # Search by product ID, product name, or customer comment.
         if search_text:
             pattern = f"%{search_text}%"
 
@@ -944,7 +1051,6 @@ def create_app():
                 )
             )
 
-        # Validate filter values against allowed choices.
         if selected_reason in RETURN_REASONS:
             cases_query = cases_query.where(
                 ReturnRequest.selected_reason == selected_reason
@@ -992,11 +1098,9 @@ def create_app():
                 ReturnRequest.selected_reason
                 == ReturnAnalysis.verified_reason,
             )
-
         else:
             selected_mismatch = ""
 
-        # Limit dashboard results to avoid rendering too many rows.
         cases = db.session.scalars(
             cases_query.limit(200)
         ).all()
@@ -1010,20 +1114,12 @@ def create_app():
             failed_count=status_counts["failed_count"],
             customer_count=customer_count,
             product_count=product_count,
-
-        
-
-            # Customer-selected reasons
             reason_labels=reason_labels,
             reason_values=reason_values,
             reason_counts=reason_values,
-
-            # Customer versus staff comparison
             comparison_labels=comparison_labels,
             customer_comparison_values=customer_comparison_values,
             staff_comparison_values=staff_comparison_values,
-
-            # Return cases and filters
             cases=cases,
             return_reasons=RETURN_REASONS,
             analysis_statuses=ANALYSIS_STATUSES,
@@ -1035,8 +1131,6 @@ def create_app():
             selected_evidence=selected_evidence,
             selected_review=selected_review,
             selected_mismatch=selected_mismatch,
-
-            # Evidence and staff-review statistics
             strong_evidence_count=evidence_counts[
                 "strong_evidence_count"
             ],
@@ -1080,7 +1174,6 @@ def create_app():
             .where(ReturnRequest.analysis_status == "Failed")
         ) or 0
 
-        # Evidence quality distribution
         evidence_rows = db.session.execute(
             select(
                 ReturnAnalysis.evidence_strength,
@@ -1102,7 +1195,6 @@ def create_app():
             else:
                 evidence_counts["Not assessed"] += count
 
-        # Staff verification statistics
         reviewed_count = db.session.scalar(
             select(func.count())
             .select_from(ReturnAnalysis)
@@ -1123,7 +1215,6 @@ def create_app():
             )
         ) or 0
 
-        # Compare AI predictions against staff-confirmed reasons.
         verified_records = db.session.execute(
             select(
                 ReturnRequest.selected_reason,
@@ -1143,7 +1234,8 @@ def create_app():
         ).all()
 
         comparable_records = [
-            record for record in verified_records
+            record
+            for record in verified_records
             if record.predicted_reason
         ]
 
@@ -1164,7 +1256,6 @@ def create_app():
             if comparable_records else None
         )
 
-        # Compare customer-selected reasons against staff verification.
         customer_matches = sum(
             1 for record in verified_records
             if record.selected_reason == record.verified_reason
@@ -1180,7 +1271,6 @@ def create_app():
             if verified_records else None
         )
 
-        # Return reason distribution from submitted requests.
         reason_rows = db.session.execute(
             select(
                 ReturnRequest.selected_reason,
@@ -1195,11 +1285,8 @@ def create_app():
             for reason, count in reason_rows
         ]
 
-        reason_values = [
-            count for reason, count in reason_rows
-        ]
+        reason_values = [count for reason, count in reason_rows]
 
-        # Analysis status distribution.
         status_rows = db.session.execute(
             select(
                 ReturnRequest.analysis_status,
@@ -1213,11 +1300,8 @@ def create_app():
             for status, count in status_rows
         ]
 
-        status_values = [
-            count for status, count in status_rows
-        ]
+        status_values = [count for status, count in status_rows]
 
-        # Recent cases where customer and staff reasons differ.
         mismatch_cases = db.session.scalars(
             select(ReturnRequest)
             .join(
@@ -1239,7 +1323,6 @@ def create_app():
             .limit(20)
         ).all()
 
-        # Recent cases where AI prediction differs from staff review.
         ai_mismatch_cases = db.session.scalars(
             select(ReturnRequest)
             .join(
@@ -1294,10 +1377,7 @@ def create_app():
     @app.route("/admin/returns/<int:return_id>")
     @role_required("admin")
     def admin_return_details(return_id):
-        return_request = db.session.get(
-            ReturnRequest,
-            return_id,
-        )
+        return_request = db.session.get(ReturnRequest, return_id)
 
         if return_request is None:
             abort(404)
@@ -1309,14 +1389,12 @@ def create_app():
         )
 
         listing_images = [
-            image
-            for image in return_request.images
+            image for image in return_request.images
             if image.image_type == "listing"
         ]
 
         received_images = [
-            image
-            for image in return_request.images
+            image for image in return_request.images
             if image.image_type == "received"
         ]
 
@@ -1340,10 +1418,7 @@ def create_app():
     )
     @role_required("admin")
     def review_return(return_id):
-        return_request = db.session.get(
-            ReturnRequest,
-            return_id,
-        )
+        return_request = db.session.get(ReturnRequest, return_id)
 
         if return_request is None:
             abort(404)
@@ -1405,11 +1480,7 @@ def create_app():
             )
 
             db.session.commit()
-
-            flash(
-                "Staff review saved successfully.",
-                "success",
-            )
+            flash("Staff review saved successfully.", "success")
 
         except Exception:
             db.session.rollback()
@@ -1441,10 +1512,7 @@ def create_app():
     )
     @role_required("admin")
     def analyze_return(return_id):
-        return_request = db.session.get(
-            ReturnRequest,
-            return_id,
-        )
+        return_request = db.session.get(ReturnRequest, return_id)
 
         if return_request is None:
             abort(404)
@@ -1666,19 +1734,69 @@ def create_app():
         if image_record is None:
             abort(404)
 
-        # Customers may only access images belonging to their cases.
+        # Customers may only access images belonging to their own cases.
         if (
             current_user.role != "admin"
             and image_record.return_request.user_id != current_user.id
         ):
             abort(403)
 
-        return send_from_directory(
-            current_app.config["UPLOAD_FOLDER"],
-            image_record.storage_name,
-            mimetype=image_record.mime_type,
-            as_attachment=False,
+        storage_name = image_record.storage_name or ""
+
+        # Do not allow paths to be supplied through the database field.
+        if (
+            not storage_name
+            or storage_name != os.path.basename(storage_name)
+            or storage_name in (".", "..")
+        ):
+            abort(404)
+
+        upload_folder = os.path.abspath(
+            current_app.config["UPLOAD_FOLDER"]
         )
+
+        local_path = os.path.abspath(
+            os.path.join(upload_folder, storage_name)
+        )
+
+        if os.path.commonpath([upload_folder, local_path]) != upload_folder:
+            abort(404)
+
+        try:
+            if os.path.isfile(local_path):
+                response = send_from_directory(
+                    upload_folder,
+                    storage_name,
+                    mimetype=image_record.mime_type,
+                    as_attachment=False,
+                )
+            else:
+                # The image may be missing locally on another machine
+                # or after a deployment. Retrieve it from cloud storage.
+                image_bytes = download_from_supabase(storage_name)
+
+                if not image_bytes:
+                    abort(404)
+
+                response = send_file(
+                    BytesIO(image_bytes),
+                    mimetype=image_record.mime_type or "application/octet-stream",
+                    download_name=storage_name,
+                    as_attachment=False,
+                    max_age=0,
+                )
+
+        except Exception:
+            current_app.logger.exception(
+                "Could not retrieve image %s.",
+                image_id,
+            )
+            abort(404)
+
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+
+        return response
 
     # -----------------------------------------------------
     # LOGOUT
@@ -1740,9 +1858,11 @@ def create_app():
 
         except Exception:
             db.session.rollback()
+
             app.logger.exception(
                 "Could not seed development accounts."
             )
+
             raise click.ClickException(
                 "Could not create development accounts. "
                 "Check the server error log."

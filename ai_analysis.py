@@ -1,6 +1,8 @@
 
 import logging
 import os
+import tempfile
+from pathlib import Path
 
 import torch
 from PIL import Image, UnidentifiedImageError
@@ -22,10 +24,13 @@ logger = logging.getLogger(__name__)
 TEXT_MODEL_NAME = "valhalla/distilbart-mnli-12-1"
 IMAGE_MODEL_NAME = "openai/clip-vit-base-patch32"
 
+SUPABASE_BUCKET_DEFAULT = "return-images"
+
 _text_model = None
 _image_classifier = None
 _clip_model = None
 _clip_processor = None
+_supabase_client = None
 
 
 # ---------------------------------------------------------
@@ -101,6 +106,265 @@ VISUAL_REASON_MAPPING = {
 
 
 # ---------------------------------------------------------
+# SUPABASE STORAGE HELPERS
+# ---------------------------------------------------------
+
+def get_supabase_client():
+    """
+    Create the Supabase client only when a cloud image is needed.
+
+    The Supabase service-role key must remain in the environment
+    and must never be exposed in templates or browser code.
+    """
+
+    global _supabase_client
+
+    if _supabase_client is not None:
+        return _supabase_client
+
+    supabase_url = os.environ.get("SUPABASE_URL", "").strip()
+    supabase_key = os.environ.get(
+        "SUPABASE_SERVICE_ROLE_KEY", ""
+    ).strip()
+
+    if not supabase_url or not supabase_key:
+        logger.warning(
+            "Supabase image fallback is unavailable because "
+            "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing."
+        )
+        return None
+
+    try:
+        from supabase import create_client
+
+        _supabase_client = create_client(
+            supabase_url,
+            supabase_key,
+        )
+
+        return _supabase_client
+
+    except Exception:
+        logger.exception(
+            "Could not initialize the Supabase client."
+        )
+        return None
+
+
+def get_supabase_bucket_name():
+    """Return the configured private Supabase Storage bucket name."""
+
+    return (
+        os.environ.get(
+            "SUPABASE_STORAGE_BUCKET",
+            SUPABASE_BUCKET_DEFAULT,
+        ).strip()
+        or SUPABASE_BUCKET_DEFAULT
+    )
+
+
+def _safe_storage_name(image_record):
+    """
+    Get a safe image filename from the database record.
+
+    Storage objects in this application use the filename as the
+    Supabase object key. Directory traversal and arbitrary paths
+    are not accepted as cloud object keys.
+    """
+
+    if not image_record:
+        return None
+
+    storage_name = getattr(
+        image_record,
+        "storage_name",
+        None,
+    )
+
+    if not isinstance(storage_name, str):
+        return None
+
+    storage_name = storage_name.strip()
+
+    if not storage_name or "\x00" in storage_name:
+        return None
+
+    # Supabase object keys are expected to be filenames in this project.
+    # Do not permit a database value to access arbitrary cloud paths.
+    if (
+        "/" in storage_name
+        or "\\" in storage_name
+        or storage_name in {".", ".."}
+        or os.path.basename(storage_name) != storage_name
+    ):
+        logger.warning(
+            "Rejected unsafe image storage name."
+        )
+        return None
+
+    return storage_name
+
+
+def _download_image_from_supabase(storage_name):
+    """
+    Download an image object from the private Supabase bucket.
+
+    Returns the downloaded bytes or None if the object cannot
+    be retrieved.
+    """
+
+    client = get_supabase_client()
+
+    if client is None or not storage_name:
+        return None
+
+    try:
+        bucket = client.storage.from_(
+            get_supabase_bucket_name()
+        )
+
+        image_bytes = bucket.download(storage_name)
+
+        if not image_bytes:
+            logger.warning(
+                "Supabase returned an empty image object: %s",
+                storage_name,
+            )
+            return None
+
+        if not isinstance(image_bytes, bytes):
+            image_bytes = bytes(image_bytes)
+
+        return image_bytes
+
+    except Exception:
+        logger.warning(
+            "Could not download image from Supabase: %s",
+            storage_name,
+            exc_info=True,
+        )
+        return None
+
+
+def _is_valid_image_file(image_path):
+    """Check that a local file contains a readable image."""
+
+    if not image_path or not os.path.isfile(image_path):
+        return False
+
+    try:
+        with Image.open(image_path) as image:
+            image.verify()
+
+        with Image.open(image_path) as image:
+            image.convert("RGB").load()
+
+        return True
+
+    except (
+        OSError,
+        ValueError,
+        UnidentifiedImageError,
+    ):
+        return False
+
+
+def _cache_supabase_image(image_bytes, destination_path):
+    """
+    Validate downloaded image bytes and cache them locally.
+
+    A temporary file and atomic replacement help avoid leaving a
+    partially written image in the upload folder.
+    """
+
+    if not image_bytes or not destination_path:
+        return None
+
+    destination_path = os.path.realpath(
+        destination_path
+    )
+
+    destination_folder = os.path.dirname(
+        destination_path
+    )
+
+    temporary_path = None
+
+    try:
+        os.makedirs(
+            destination_folder,
+            exist_ok=True,
+        )
+
+        # Verify that the downloaded content is actually an image.
+        from io import BytesIO
+
+        with Image.open(BytesIO(image_bytes)) as image:
+            image.verify()
+
+        with Image.open(BytesIO(image_bytes)) as image:
+            image.convert("RGB").load()
+
+        file_descriptor, temporary_path = tempfile.mkstemp(
+            prefix=".image-cache-",
+            suffix=".tmp",
+            dir=destination_folder,
+        )
+
+        with os.fdopen(file_descriptor, "wb") as temporary_file:
+            temporary_file.write(image_bytes)
+            temporary_file.flush()
+            os.fsync(temporary_file.fileno())
+
+        if not _is_valid_image_file(temporary_path):
+            logger.warning(
+                "Downloaded image failed local validation."
+            )
+            return None
+
+        os.replace(
+            temporary_path,
+            destination_path,
+        )
+
+        temporary_path = None
+
+        logger.info(
+            "Cached image downloaded from Supabase: %s",
+            os.path.basename(destination_path),
+        )
+
+        return destination_path
+
+    except (
+        OSError,
+        ValueError,
+        UnidentifiedImageError,
+    ):
+        logger.warning(
+            "Could not cache downloaded Supabase image.",
+            exc_info=True,
+        )
+        return None
+
+    except Exception:
+        logger.warning(
+            "Unexpected error while caching a Supabase image.",
+            exc_info=True,
+        )
+        return None
+
+    finally:
+        if temporary_path and os.path.exists(temporary_path):
+            try:
+                os.remove(temporary_path)
+            except OSError:
+                logger.warning(
+                    "Could not remove temporary image cache file."
+                )
+
+
+# ---------------------------------------------------------
 # MODEL LOADING
 # ---------------------------------------------------------
 
@@ -161,30 +425,42 @@ def get_clip_components():
 
 def get_image_path(image_record, upload_folder):
     """
-    Resolve an image record's storage_name inside the upload folder.
+    Resolve an image record to a valid local image path.
 
-    Returns None for missing, invalid, or unsafe paths.
+    Resolution order:
+    1. Use an existing valid local image.
+    2. If missing or invalid, download the object from Supabase.
+    3. Validate and cache the downloaded image locally.
+
+    Returns None if the image cannot be retrieved safely.
     """
 
     if not image_record or not upload_folder:
         return None
 
-    storage_name = getattr(image_record, "storage_name", None)
+    storage_name = _safe_storage_name(image_record)
 
     if not storage_name:
         return None
 
     try:
-        upload_root = os.path.realpath(upload_folder)
+        upload_root = os.path.realpath(
+            upload_folder
+        )
 
-        if os.path.isabs(storage_name):
-            image_path = os.path.realpath(storage_name)
-        else:
-            image_path = os.path.realpath(
-                os.path.join(upload_root, storage_name)
+        os.makedirs(
+            upload_root,
+            exist_ok=True,
+        )
+
+        image_path = os.path.realpath(
+            os.path.join(
+                upload_root,
+                storage_name,
             )
+        )
 
-        # Prevent stored filenames from escaping the upload folder.
+        # Ensure the destination stays inside the upload directory.
         if os.path.commonpath(
             [upload_root, image_path]
         ) != upload_root:
@@ -193,12 +469,37 @@ def get_image_path(image_record, upload_folder):
             )
             return None
 
-        if os.path.isfile(image_path):
+        # First choice: a valid local image.
+        if _is_valid_image_file(image_path):
             return image_path
+
+        # The local copy is missing or damaged. Try Supabase.
+        logger.info(
+            "Local image unavailable; checking Supabase for %s.",
+            storage_name,
+        )
+
+        image_bytes = _download_image_from_supabase(
+            storage_name
+        )
+
+        if image_bytes is None:
+            return None
+
+        # Cache the validated download so later analysis can use
+        # the local copy without another cloud request.
+        cached_path = _cache_supabase_image(
+            image_bytes,
+            image_path,
+        )
+
+        if cached_path and _is_valid_image_file(cached_path):
+            return cached_path
 
     except (OSError, ValueError, TypeError):
         logger.warning(
-            "Could not resolve image path.",
+            "Could not resolve image path for storage name %s.",
+            storage_name,
             exc_info=True,
         )
 
@@ -387,6 +688,7 @@ def _classify_comment(comment, valid_reasons):
     )
 
     scores = {}
+
     label_to_reason = dict(
         zip(candidate_labels, valid_reasons)
     )
@@ -490,30 +792,8 @@ def _assess_fallback_evidence(
     ):
         return "Insufficient"
 
-    ranked_scores = sorted(
-        text_scores.values(),
-        reverse=True,
-    )
-
-    top_score = ranked_scores[0]
-    second_score = (
-        ranked_scores[1]
-        if len(ranked_scores) > 1
-        else 0.0
-    )
-
-    score_gap = top_score - second_score
-
-    if conflicting_evidence:
-        return "Weak"
-
-    # Even a high text score is not independent proof of the cause.
-    if top_score >= 0.60 and score_gap >= 0.15:
-        return "Weak"
-
-    if top_score >= 0.45 and score_gap >= 0.08:
-        return "Weak"
-
+    # Text-only classification cannot independently verify a return cause.
+    # Even a high score must not be presented as strong evidence.
     return "Weak"
 
 
@@ -551,6 +831,8 @@ def analyze_return_request(
 
     Gemini assesses combined evidence when available. DistilBART and CLIP
     provide supporting signals. The prediction is not a staff-verified result.
+
+    Images are resolved from local storage first, then Supabase Storage.
     """
 
     valid_reasons = _get_valid_reasons(return_reasons)
@@ -596,7 +878,9 @@ def analyze_return_request(
 
     listing_paths = []
     received_paths = []
+    unavailable_image_count = 0
 
+    # Resolve every image through local storage / Supabase fallback.
     for image_record in images:
         image_type = (
             getattr(image_record, "image_type", "") or ""
@@ -608,6 +892,7 @@ def analyze_return_request(
         )
 
         if not image_path:
+            unavailable_image_count += 1
             continue
 
         if image_type == "listing":
@@ -621,6 +906,23 @@ def analyze_return_request(
         if listing_paths
         else None
     )
+
+    if unavailable_image_count:
+        analysis_notes.append(
+            f"{unavailable_image_count} image(s) could not be loaded "
+            "from local storage or Supabase. The analysis may be incomplete."
+        )
+
+    if listing_paths:
+        analysis_notes.append(
+            f"{len(listing_paths)} listing image(s) were loaded successfully."
+        )
+
+    if received_paths:
+        analysis_notes.append(
+            f"{len(received_paths)} received-product image(s) were loaded "
+            "successfully, including available multi-angle images."
+        )
 
     # -----------------------------------------------------
     # INPUT NOTES
@@ -874,6 +1176,7 @@ def analyze_return_request(
         ),
         "listing_image_available": bool(listing_paths),
         "received_image_count": len(received_paths),
+        "unavailable_image_count": unavailable_image_count,
         "supporting_evidence": supporting_evidence,
         "conflicting_evidence": conflicting_evidence,
         "order_sku_verified": False,
@@ -882,11 +1185,15 @@ def analyze_return_request(
         "similar_staff_verified_cases": [
             {
                 "case_id": case.get("case_id"),
-                "product_name": str(case.get("product_name", ""))[:200],
+                "product_name": str(
+                    case.get("product_name", "")
+                )[:200],
                 "customer_selected_reason": str(
                     case.get("customer_selected_reason", "")
                 )[:100],
-                "customer_comment": str(case.get("customer_comment", ""))[:700],
+                "customer_comment": str(
+                    case.get("customer_comment", "")
+                )[:700],
                 "staff_verified_reason": str(
                     case.get("staff_verified_reason", "")
                 )[:100],
@@ -939,13 +1246,19 @@ def analyze_return_request(
     # -----------------------------------------------------
 
     if explanation:
-        predicted_reason = explanation["predicted_reason"]
-        evidence_strength = explanation["evidence_strength"]
+        predicted_reason = explanation.get(
+            "predicted_reason"
+        )
+
+        evidence_strength = explanation.get(
+            "evidence_strength",
+            "Insufficient",
+        )
 
         if explanation.get("case_summary"):
             analysis_notes.append(
                 "Gemini case summary: "
-                + explanation["case_summary"]
+                + str(explanation["case_summary"])
             )
 
         for item in explanation.get("evidence_for", []):
@@ -964,7 +1277,7 @@ def analyze_return_request(
         if alternatives:
             analysis_notes.append(
                 "Gemini alternatives: "
-                + " | ".join(alternatives)
+                + " | ".join(str(item) for item in alternatives)
             )
 
         missing_information = explanation.get(
@@ -975,19 +1288,21 @@ def analyze_return_request(
         if missing_information:
             analysis_notes.append(
                 "Information requiring verification: "
-                + " | ".join(missing_information)
+                + " | ".join(
+                    str(item) for item in missing_information
+                )
             )
 
         if explanation.get("final_assessment"):
             analysis_notes.append(
                 "Gemini assessment: "
-                + explanation["final_assessment"]
+                + str(explanation["final_assessment"])
             )
 
         if explanation.get("recommended_next_action"):
             analysis_notes.append(
                 "Recommended staff action: "
-                + explanation["recommended_next_action"]
+                + str(explanation["recommended_next_action"])
             )
 
         requires_human_review = explanation.get(
@@ -996,8 +1311,8 @@ def analyze_return_request(
         )
 
     else:
-        # Fallback if Gemini is unavailable.
-        # This is not a verified or necessarily accurate prediction.
+        # If Gemini is unavailable, use a text suggestion only when one exists.
+        # With no usable text suggestion, do not fabricate a prediction.
         predicted_reason = text_suggestion or "Other"
 
         evidence_strength = _assess_fallback_evidence(
@@ -1011,6 +1326,12 @@ def analyze_return_request(
         analysis_notes.append(
             "Fallback category is unverified. Human review is required."
         )
+
+        if not text_suggestion:
+            analysis_notes.append(
+                "No usable text classification was available. "
+                "The fallback category is not an evidence-based prediction."
+            )
 
     # -----------------------------------------------------
     # STEP 6: ENFORCE APP.PY COMPATIBILITY
@@ -1042,6 +1363,13 @@ def analyze_return_request(
         evidence_strength = "Weak"
         requires_human_review = True
 
+    # Missing images can leave the assessment incomplete.
+    if unavailable_image_count:
+        if evidence_strength == "Strong":
+            evidence_strength = "Weak"
+
+        requires_human_review = True
+
     if not customer_comment and not received_paths:
         evidence_strength = "Insufficient"
         requires_human_review = True
@@ -1056,8 +1384,8 @@ def analyze_return_request(
     # STEP 7: DASHBOARD SCORE AND FINAL RESULT
     # -----------------------------------------------------
 
-    # Preserve the existing numeric field for dashboard compatibility.
-    # This is not calibrated confidence or measured accuracy.
+    # This value is retained for dashboard compatibility.
+    # It is not calibrated confidence or measured accuracy.
     confidence = round(
         text_scores.get(predicted_reason, 0.0) * 100,
         2,
@@ -1078,10 +1406,12 @@ def analyze_return_request(
         f"Text: {TEXT_MODEL_NAME}; "
         f"Image: {IMAGE_MODEL_NAME}; "
         f"Reasoning: {GEMINI_MODEL_NAME}; "
-        f"Verified examples: {len(similar_cases)}"
+        f"Verified examples: {len(similar_cases)}; "
+        "Image storage: local/Supabase fallback"
     )
 
-    # The supplied app.py uses SQLAlchemy Text columns for these fields.
+    # Do not modify return_request.selected_reason or any staff-verified field.
+    # The caller in app.py stores these AI outputs separately.
     return {
         "predicted_reason": predicted_reason,
         "evidence_strength": evidence_strength,
