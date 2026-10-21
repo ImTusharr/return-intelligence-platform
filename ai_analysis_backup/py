@@ -1,0 +1,483 @@
+
+from pathlib import Path
+
+import torch
+from PIL import Image, UnidentifiedImageError
+from transformers import (
+    CLIPModel,
+    CLIPProcessor,
+    pipeline,
+)
+
+
+TEXT_MODEL_NAME = "valhalla/distilbart-mnli-12-1"
+IMAGE_MODEL_NAME = "openai/clip-vit-base-patch32"
+
+_text_model = None
+_image_classifier = None
+_clip_model = None
+_clip_processor = None
+
+RETURN_REASON_DESCRIPTIONS = {
+    "Transit Damage": (
+        "a product damaged during shipping, with cracks, dents, "
+        "broken parts or transport damage"
+    ),
+    "Manufacturing Defect": (
+        "a product with a manufacturing defect, poor assembly "
+        "or a defective component"
+    ),
+    "Wrong Item Received": (
+        "a customer receiving a different product or model "
+        "from the product ordered"
+    ),
+    "Size Issue": (
+        "a product that does not fit or has the wrong size"
+    ),
+    "Customer Expectation": (
+        "a product that does not meet the customer's expectations"
+    ),
+    "Not Working": (
+        "a product that does not work or fails to operate"
+    ),
+    "Missing Parts": (
+        "a product package with missing parts or accessories"
+    ),
+    "Other": (
+        "another return reason not covered by the other categories"
+    ),
+}
+
+RETURN_REASONS = list(RETURN_REASON_DESCRIPTIONS.keys())
+
+
+def get_text_model():
+    global _text_model
+
+    if _text_model is None:
+        _text_model = pipeline(
+            "zero-shot-classification",
+            model=TEXT_MODEL_NAME,
+            device=-1,
+        )
+
+    return _text_model
+
+
+def get_image_classifier():
+    global _image_classifier
+
+    if _image_classifier is None:
+        _image_classifier = pipeline(
+            "zero-shot-image-classification",
+            model=IMAGE_MODEL_NAME,
+            device=-1,
+        )
+
+    return _image_classifier
+
+
+def get_clip_components():
+    global _clip_model, _clip_processor
+
+    if _clip_model is None or _clip_processor is None:
+        _clip_processor = CLIPProcessor.from_pretrained(
+            IMAGE_MODEL_NAME
+        )
+        _clip_model = CLIPModel.from_pretrained(
+            IMAGE_MODEL_NAME
+        )
+        _clip_model.eval()
+
+    return _clip_model, _clip_processor
+
+
+def get_image_path(image_record, upload_folder):
+    """Resolve a saved image using its database record."""
+
+    if not image_record or not image_record.storage_name:
+        return None
+
+    path = Path(upload_folder) / image_record.storage_name
+
+    if path.is_file():
+        return path
+
+    return None
+
+
+def load_rgb_image(image_path):
+    """Open a valid image and return an independent RGB copy."""
+
+    try:
+        with Image.open(image_path) as image:
+            image.verify()
+
+        with Image.open(image_path) as image:
+            return image.convert("RGB")
+
+    except (OSError, ValueError, UnidentifiedImageError):
+        return None
+
+
+def compare_listing_and_received_images(
+    listing_path,
+    received_paths,
+):
+    """
+    Compare listing and received image embeddings.
+
+    Similarity means visual resemblance only. It does not prove
+    product identity, damage, defects or completeness.
+    """
+
+    listing_image = load_rgb_image(listing_path)
+
+    if listing_image is None:
+        return None
+
+    received_images = []
+
+    for path in received_paths:
+        image = load_rgb_image(path)
+
+        if image is not None:
+            received_images.append(image)
+
+    if not received_images:
+        return None
+
+    model, processor = get_clip_components()
+
+    inputs = processor(
+        images=[listing_image] + received_images,
+        return_tensors="pt",
+        padding=True,
+    )
+
+    with torch.no_grad():
+        image_output = model.get_image_features(**inputs)
+
+        # Handle different output formats across Transformers versions.
+        if isinstance(image_output, torch.Tensor):
+            features = image_output
+
+        elif hasattr(image_output, "pooler_output"):
+            features = image_output.pooler_output
+
+        elif hasattr(image_output, "image_embeds"):
+            features = image_output.image_embeds
+
+        else:
+            raise TypeError(
+                "CLIP returned an unsupported output type: "
+                f"{type(image_output).__name__}"
+            )
+
+    if features is None or features.ndim != 2:
+        raise ValueError(
+            "CLIP did not return valid two-dimensional image features."
+        )
+
+    features = features / features.norm(
+        p=2,
+        dim=-1,
+        keepdim=True,
+    ).clamp(min=1e-12)
+
+    listing_features = features[0]
+    received_features = features[1:]
+
+    similarities = (
+        received_features @ listing_features.unsqueeze(-1)
+    ).squeeze(-1)
+
+    values = similarities.tolist()
+
+    return {
+        "average_similarity": round(
+            sum(values) / len(values), 4
+        ),
+        "individual_similarities": [
+            round(value, 4) for value in values
+        ],
+    }
+
+
+def analyze_return_request(
+    return_request,
+    upload_folder,
+    return_reasons,
+):
+    """
+    Analyze return text and received-item images.
+
+    Returns AI suggestions only. Does not modify the customer's
+    selected reason or the staff-confirmed reason.
+    """
+
+    reasons = [
+        reason
+        for reason in return_reasons
+        if reason in RETURN_REASON_DESCRIPTIONS
+    ]
+
+    if not reasons:
+        raise ValueError(
+            "No supported return reasons were provided."
+        )
+
+    comment = (return_request.reason_comment or "").strip()
+    selected_reason = (
+        return_request.selected_reason or ""
+    ).strip()
+
+    listing_records = [
+        image
+        for image in return_request.images
+        if image.image_type == "listing"
+    ]
+
+    received_records = [
+        image
+        for image in return_request.images
+        if image.image_type == "received"
+    ]
+
+    listing_path = (
+        get_image_path(listing_records[0], upload_folder)
+        if listing_records
+        else None
+    )
+
+    received_paths = [
+        path
+        for record in received_records
+        if (
+            path := get_image_path(record, upload_folder)
+        ) is not None
+    ]
+
+    if not comment and not received_paths:
+        raise ValueError(
+            "No usable customer explanation or received-item "
+            "images are available for analysis."
+        )
+
+    text_scores = {}
+    image_scores = {}
+
+    # 1. Analyze the customer's written explanation.
+    if comment:
+        text_result = get_text_model()(
+            comment,
+            candidate_labels=reasons,
+            multi_label=False,
+        )
+
+        text_scores = {
+            label: float(score)
+            for label, score in zip(
+                text_result["labels"],
+                text_result["scores"],
+            )
+        }
+
+    # 2. Analyze received-item images against reason descriptions.
+    if received_paths:
+        image_classifier = get_image_classifier()
+
+        description_to_reason = {
+            RETURN_REASON_DESCRIPTIONS[reason]: reason
+            for reason in reasons
+        }
+
+        for image_path in received_paths:
+            image = load_rgb_image(image_path)
+
+            if image is None:
+                continue
+
+            results = image_classifier(
+                image,
+                candidate_labels=list(
+                    description_to_reason.keys()
+                ),
+            )
+
+            for result in results:
+                reason = description_to_reason.get(
+                    result["label"]
+                )
+
+                if reason:
+                    image_scores.setdefault(
+                        reason, []
+                    ).append(float(result["score"]))
+
+    image_scores = {
+        reason: sum(scores) / len(scores)
+        for reason, scores in image_scores.items()
+        if scores
+    }
+
+    if not text_scores and not image_scores:
+        raise ValueError(
+            "Neither the text nor image model returned usable results."
+        )
+
+    # Combine only the modalities that returned scores.
+    # These weights are heuristics, not a trained fusion model.
+    combined_scores = {}
+
+    for reason in reasons:
+        scores = []
+        weights = []
+
+        if reason in text_scores:
+            scores.append(text_scores[reason])
+            weights.append(0.55)
+
+        if reason in image_scores:
+            scores.append(image_scores[reason])
+            weights.append(0.45)
+
+        if scores:
+            combined_scores[reason] = sum(
+                score * weight
+                for score, weight in zip(scores, weights)
+            ) / sum(weights)
+
+    ranked = sorted(
+        combined_scores.items(),
+        key=lambda item: item[1],
+        reverse=True,
+    )
+
+    predicted_reason, top_score = ranked[0]
+
+    second_score = (
+        ranked[1][1] if len(ranked) > 1 else 0.0
+    )
+
+    score_gap = top_score - second_score
+
+    text_leader = (
+        max(text_scores, key=text_scores.get)
+        if text_scores
+        else None
+    )
+
+    image_leader = (
+        max(image_scores, key=image_scores.get)
+        if image_scores
+        else None
+    )
+
+    modalities_agree = (
+        text_leader is not None
+        and image_leader is not None
+        and text_leader == image_leader
+    )
+
+    # Initial review-priority rules; validate using staff-reviewed data.
+    if (
+        modalities_agree
+        and top_score >= 0.45
+        and score_gap >= 0.08
+    ):
+        evidence_strength = "Strong"
+
+    elif top_score >= 0.30 and score_gap >= 0.03:
+        evidence_strength = "Weak"
+
+    else:
+        evidence_strength = "Insufficient"
+
+    supporting = []
+    conflicting = []
+
+    if text_leader:
+        supporting.append(
+            f"Text model's leading suggestion: {text_leader}."
+        )
+
+    if image_leader:
+        supporting.append(
+            "Received-image model's leading suggestion: "
+            f"{image_leader}."
+        )
+
+    if (
+        text_leader
+        and image_leader
+        and not modalities_agree
+    ):
+        conflicting.append(
+            "Text and image models suggest different leading reasons."
+        )
+
+    if selected_reason and selected_reason != predicted_reason:
+        conflicting.append(
+            "The AI suggestion differs from the customer's "
+            "selected reason."
+        )
+
+    if not comment:
+        conflicting.append(
+            "No customer explanation was available for text analysis."
+        )
+
+    if not received_paths:
+        conflicting.append(
+            "No accessible received-item images were available "
+            "for analysis."
+        )
+
+    # Compare listing and received images separately.
+    visual_comparison = None
+
+    if listing_path and received_paths:
+        visual_comparison = compare_listing_and_received_images(
+            listing_path,
+            received_paths,
+        )
+
+        if visual_comparison is not None:
+            supporting.append(
+                "Listing-to-received visual similarity was calculated. "
+                "It measures resemblance, not proof of identity "
+                "or product condition."
+            )
+
+    notes = [
+        "Pretrained text and image models were used.",
+        "The predicted reason is an AI suggestion, not a verified fact.",
+        "The score is a model score, not a calibrated probability.",
+        "Visual similarity alone cannot establish damage, defects "
+        "or missing parts.",
+        "Staff must inspect the evidence and confirm the actual reason.",
+    ]
+
+    if visual_comparison is None:
+        notes.append(
+            "A listing-to-received image comparison was not available."
+        )
+    else:
+        notes.append(
+            "Average listing-to-received visual similarity: "
+            f"{visual_comparison['average_similarity']} "
+            "(CLIP cosine similarity; not a probability)."
+        )
+
+    return {
+        "predicted_reason": predicted_reason,
+        "evidence_strength": evidence_strength,
+        "confidence": round(float(top_score) * 100, 2),
+        "supporting_evidence": "\n".join(supporting),
+        "conflicting_evidence": "\n".join(conflicting),
+        "analysis_notes": " ".join(notes),
+        "model_version": (
+            f"text:{TEXT_MODEL_NAME}; image:{IMAGE_MODEL_NAME}"
+        ),
+    }

@@ -1,0 +1,1299 @@
+
+{% extends "base.html" %}
+
+{% block title %}Return Case #{{ return_request.id }}{% endblock %}
+
+{% block head %}
+<style>
+    .case-page {
+        --case-primary: #4f46e5;
+        --case-primary-dark: #4338ca;
+        --case-text: #172033;
+        --case-muted: #687386;
+        --case-border: #e6eaf0;
+        --case-surface: #ffffff;
+        --case-bg: #f5f7fb;
+        --case-green: #15803d;
+        --case-red: #b91c1c;
+        --case-amber: #a16207;
+
+        max-width: 1320px;
+        margin: 0 auto;
+        padding: 8px 0 36px;
+        color: var(--case-text);
+    }
+
+    .case-page,
+    .case-page * {
+        box-sizing: border-box;
+    }
+
+    .case-page h1,
+    .case-page h2,
+    .case-page h3,
+    .case-page p {
+        margin-top: 0;
+    }
+
+    .case-page a {
+        transition: background-color .18s ease,
+                    color .18s ease,
+                    border-color .18s ease;
+    }
+
+    .case-muted {
+        color: var(--case-muted);
+        font-size: 13px;
+        line-height: 1.7;
+        margin-bottom: 0;
+    }
+
+    /* Top navigation */
+
+    .case-back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: #4f46e5;
+        font-size: 13px;
+        font-weight: 700;
+        text-decoration: none;
+        margin-bottom: 20px;
+        padding: 9px 12px;
+        border-radius: 9px;
+    }
+
+    .case-back-link:hover {
+        background: #eef2ff;
+    }
+
+    /* Header */
+
+    .case-hero {
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 22px;
+        flex-wrap: wrap;
+        padding: 27px 30px;
+        margin-bottom: 22px;
+        border: 1px solid #e1e7ff;
+        border-radius: 18px;
+        background:
+            radial-gradient(circle at 95% 10%,
+                rgba(129, 140, 248, .16), transparent 34%),
+            linear-gradient(135deg, #ffffff, #f7f8ff);
+    }
+
+    .case-eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--case-primary);
+        text-transform: uppercase;
+        letter-spacing: .09em;
+        font-size: 10px;
+        font-weight: 800;
+        margin-bottom: 10px;
+    }
+
+    .case-title {
+        font-size: clamp(24px, 3vw, 32px);
+        line-height: 1.2;
+        letter-spacing: -.8px;
+        margin-bottom: 9px !important;
+        overflow-wrap: anywhere;
+    }
+
+    .case-subtitle {
+        max-width: 680px;
+        color: var(--case-muted);
+        font-size: 13px;
+        line-height: 1.8;
+        margin-bottom: 0;
+    }
+
+    .case-hero-side {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 10px;
+    }
+
+    .case-id-label {
+        font-size: 11px;
+        color: var(--case-muted);
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+    }
+
+    .case-id-value {
+        font-size: 20px;
+        font-weight: 800;
+        color: var(--case-text);
+    }
+
+    /* Status pills */
+
+    .case-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        width: fit-content;
+        max-width: 100%;
+        padding: 7px 11px;
+        border: 1px solid #e5e7eb;
+        border-radius: 999px;
+        background: #f3f4f6;
+        color: #374151;
+        font-size: 11px;
+        font-weight: 800;
+        overflow-wrap: anywhere;
+    }
+
+    .case-status::before {
+        content: "";
+        display: inline-block;
+        width: 7px;
+        height: 7px;
+        flex: 0 0 7px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    .case-status-analyzed,
+    .case-status-reviewed,
+    .case-status-corrected,
+    .case-status-strong,
+    .case-status-match {
+        background: #ecfdf3;
+        color: #166534;
+        border-color: #bbf7d0;
+    }
+
+    .case-status-pending,
+    .case-status-processing,
+    .case-status-weak,
+    .case-status-mismatch {
+        background: #fffbeb;
+        color: #92400e;
+        border-color: #fde68a;
+    }
+
+    .case-status-failed,
+    .case-status-insufficient {
+        background: #fef2f2;
+        color: #b91c1c;
+        border-color: #fecaca;
+    }
+
+    /* Main cards */
+
+    .case-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 20px;
+        margin-bottom: 20px;
+        align-items: stretch;
+    }
+
+    .case-card {
+        min-width: 0;
+        margin-bottom: 20px;
+        padding: 24px;
+        background: var(--case-surface);
+        border: 1px solid var(--case-border);
+        border-radius: 16px;
+        box-shadow: 0 3px 12px rgba(15, 23, 42, .025);
+    }
+
+    .case-grid .case-card {
+        margin-bottom: 0;
+    }
+
+    .case-section-heading {
+        display: flex;
+        align-items: flex-start;
+        gap: 13px;
+        margin-bottom: 21px;
+    }
+
+    .case-section-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 40px;
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        background: #eef2ff;
+        color: var(--case-primary);
+        font-size: 19px;
+        font-weight: 800;
+    }
+
+    .case-section-heading h2 {
+        font-size: 16px;
+        line-height: 1.4;
+        margin-bottom: 4px;
+        letter-spacing: -.2px;
+    }
+
+    .case-section-heading p {
+        margin-bottom: 0;
+        color: var(--case-muted);
+        font-size: 12px;
+        line-height: 1.65;
+    }
+
+    /* Information rows */
+
+    .case-info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 18px;
+        padding: 14px 0;
+        border-bottom: 1px solid #edf0f5;
+    }
+
+    .case-info-row:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
+    }
+
+    .case-info-label {
+        flex: 0 0 38%;
+        color: var(--case-muted);
+        font-size: 12px;
+        line-height: 1.7;
+    }
+
+    .case-info-value {
+        min-width: 0;
+        text-align: right;
+        color: var(--case-text);
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.7;
+        overflow-wrap: anywhere;
+    }
+
+    .case-reason-highlight {
+        padding: 14px;
+        background: #f8f9ff;
+        border: 1px solid #e5e7ff;
+        border-radius: 11px;
+        color: #3730a3;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.7;
+        overflow-wrap: anywhere;
+    }
+
+    .case-comment {
+        padding: 16px;
+        border: 1px solid #edf0f5;
+        background: #f9fafc;
+        border-radius: 12px;
+        font-size: 13px;
+        line-height: 1.9;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        min-height: 100px;
+    }
+
+    .case-note {
+        display: flex;
+        gap: 10px;
+        padding: 12px 14px;
+        margin-top: 15px;
+        border: 1px solid #e0e7ff;
+        border-radius: 10px;
+        background: #f5f7ff;
+        color: #4b5563;
+        font-size: 12px;
+        line-height: 1.7;
+    }
+
+    .case-note-symbol {
+        flex: 0 0 auto;
+        color: var(--case-primary);
+        font-weight: 900;
+    }
+
+    /* Images */
+
+    .case-image-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 15px;
+    }
+
+    .case-image-item {
+        min-width: 0;
+    }
+
+    .case-image-link {
+        position: relative;
+        display: block;
+        overflow: hidden;
+        border-radius: 12px;
+        border: 1px solid var(--case-border);
+        background: #f3f5f9;
+        aspect-ratio: 1 / 1;
+    }
+
+    .case-evidence-image {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform .25s ease;
+    }
+
+    .case-image-link:hover .case-evidence-image {
+        transform: scale(1.045);
+    }
+
+    .case-image-open {
+        position: absolute;
+        right: 9px;
+        bottom: 9px;
+        width: 29px;
+        height: 29px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        background: rgba(17, 24, 39, .8);
+        color: #fff;
+        font-size: 15px;
+        opacity: .9;
+    }
+
+    .case-image-caption {
+        margin-top: 8px;
+        color: #596579;
+        font-size: 11px;
+        line-height: 1.6;
+        overflow-wrap: anywhere;
+    }
+
+    .case-image-caption strong {
+        display: block;
+        margin-bottom: 2px;
+        color: #374151;
+        font-size: 11px;
+    }
+
+    .case-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 30px 18px;
+        border: 1px dashed #cbd5e1;
+        border-radius: 12px;
+        background: #f8fafc;
+        color: var(--case-muted);
+        font-size: 12px;
+        line-height: 1.7;
+        text-align: center;
+    }
+
+    .case-empty-icon {
+        font-size: 27px;
+        opacity: .7;
+    }
+
+    /* AI analysis */
+
+    .case-ai-intro {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 15px 16px;
+        margin-bottom: 20px;
+        border: 1px solid #ddd6fe;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #faf8ff, #f5f3ff);
+    }
+
+    .case-ai-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 38px;
+        width: 38px;
+        height: 38px;
+        border-radius: 11px;
+        background: #ede9fe;
+        color: #6d28d9;
+        font-size: 18px;
+        font-weight: 800;
+    }
+
+    .case-ai-intro strong {
+        display: block;
+        margin-bottom: 4px;
+        color: #4c1d95;
+        font-size: 13px;
+    }
+
+    .case-ai-intro p {
+        margin-bottom: 0;
+        color: #6b6280;
+        font-size: 12px;
+        line-height: 1.7;
+    }
+
+    .case-analysis-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 15px;
+    }
+
+    .case-analysis-item {
+        min-width: 0;
+        padding: 18px;
+        border: 1px solid #e8eaf2;
+        border-radius: 12px;
+        background: #fff;
+    }
+
+    .case-analysis-item-wide {
+        grid-column: 1 / -1;
+    }
+
+    .case-analysis-item h3 {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+        color: #5b6475;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: .045em;
+        text-transform: uppercase;
+    }
+
+    .case-analysis-value {
+        color: #202b3c;
+        font-size: 14px;
+        line-height: 1.8;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+    }
+
+    .case-analysis-prediction {
+        background: #f7f7ff;
+        border-color: #dfe2ff;
+    }
+
+    .case-analysis-prediction .case-analysis-value {
+        color: #3730a3;
+        font-size: 17px;
+        font-weight: 800;
+    }
+
+    .case-confidence {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+    }
+
+    .case-confidence-number {
+        color: #3730a3;
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: -.5px;
+    }
+
+    .case-confidence-track {
+        height: 8px;
+        overflow: hidden;
+        border-radius: 99px;
+        background: #e9eaf5;
+    }
+
+    .case-confidence-fill {
+        height: 100%;
+        max-width: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #818cf8, #4f46e5);
+    }
+
+    .case-empty-analysis {
+        padding: 24px;
+        border: 1px dashed #cbd5e1;
+        border-radius: 12px;
+        background: #f8fafc;
+    }
+
+    .case-empty-analysis h3 {
+        margin-bottom: 7px;
+        font-size: 14px;
+    }
+
+    .case-empty-analysis p {
+        margin-bottom: 16px;
+        color: var(--case-muted);
+        font-size: 12px;
+        line-height: 1.8;
+    }
+
+    /* Comparison */
+
+    .case-comparison {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+        margin: 20px 0;
+    }
+
+    .case-comparison-item {
+        padding: 16px;
+        min-width: 0;
+        border: 1px solid var(--case-border);
+        border-radius: 12px;
+        background: #fafbfe;
+    }
+
+    .case-comparison-label {
+        display: block;
+        margin-bottom: 9px;
+        color: var(--case-muted);
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .045em;
+    }
+
+    .case-comparison-value {
+        display: block;
+        color: #202b3c;
+        font-size: 14px;
+        line-height: 1.7;
+        font-weight: 800;
+        overflow-wrap: anywhere;
+    }
+
+    /* Verification form */
+
+    .case-review-banner {
+        padding: 14px 16px;
+        margin-bottom: 20px;
+        border: 1px solid #dbeafe;
+        border-radius: 12px;
+        background: #f0f7ff;
+        color: #1e40af;
+        font-size: 12px;
+        line-height: 1.8;
+    }
+
+    .case-form-group {
+        margin-bottom: 20px;
+    }
+
+    .case-form-group label {
+        display: block;
+        margin-bottom: 8px;
+        color: #273449;
+        font-size: 12px;
+        font-weight: 800;
+    }
+
+    .case-required {
+        color: #dc2626;
+    }
+
+    .case-form-group select,
+    .case-form-group textarea {
+        display: block;
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid #d6dce6;
+        border-radius: 10px;
+        background: #fff;
+        color: #202b3c;
+        font-family: inherit;
+        font-size: 13px;
+        line-height: 1.6;
+        outline: none;
+        transition: border-color .18s ease, box-shadow .18s ease;
+    }
+
+    .case-form-group select:focus,
+    .case-form-group textarea:focus {
+        border-color: #818cf8;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, .12);
+    }
+
+    .case-form-group textarea {
+        min-height: 125px;
+        resize: vertical;
+    }
+
+    .case-field-help {
+        margin: 8px 0 0;
+        color: var(--case-muted);
+        font-size: 11px;
+        line-height: 1.7;
+    }
+
+    .case-button-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+    }
+
+    .case-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 42px;
+        padding: 11px 17px;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 800;
+        line-height: 1.4;
+        text-align: center;
+        text-decoration: none;
+        cursor: pointer;
+    }
+
+    .case-button-primary {
+        background: var(--case-primary);
+        color: #fff;
+        box-shadow: 0 3px 7px rgba(79, 70, 229, .16);
+    }
+
+    .case-button-primary:hover {
+        background: var(--case-primary-dark);
+        color: #fff;
+    }
+
+    .case-button-secondary {
+        background: #fff;
+        border-color: #dce1e9;
+        color: #374151;
+    }
+
+    .case-button-secondary:hover {
+        background: #f8fafc;
+        border-color: #c4ccda;
+    }
+
+    .case-review-result {
+        padding: 18px;
+        margin-top: 22px;
+        border: 1px solid var(--case-border);
+        border-radius: 12px;
+        background: #fafbfe;
+    }
+
+    .case-review-result h3 {
+        margin-bottom: 13px;
+        font-size: 13px;
+    }
+
+    .case-review-result .case-info-row:first-of-type {
+        padding-top: 12px;
+    }
+
+    /* Responsive */
+
+    @media (max-width: 1000px) {
+        .case-image-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .case-card {
+            padding: 21px;
+        }
+    }
+
+    @media (max-width: 760px) {
+        .case-grid,
+        .case-analysis-grid,
+        .case-comparison {
+            grid-template-columns: 1fr;
+        }
+
+        .case-hero {
+            padding: 22px;
+        }
+
+        .case-hero-side {
+            align-items: flex-start;
+            width: 100%;
+            padding-top: 15px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .case-card {
+            padding: 18px;
+            border-radius: 13px;
+        }
+
+        .case-image-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .case-analysis-item-wide {
+            grid-column: auto;
+        }
+    }
+
+    @media (max-width: 420px) {
+        .case-page {
+            padding-top: 0;
+        }
+
+        .case-hero {
+            padding: 18px;
+        }
+
+        .case-title {
+            font-size: 24px;
+        }
+
+        .case-info-row {
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .case-info-label {
+            flex-basis: auto;
+        }
+
+        .case-info-value {
+            text-align: left;
+        }
+
+        .case-button-row {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .case-button {
+            width: 100%;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="case-page">
+
+    <a class="case-back-link" href="{{ url_for('admin_dashboard') }}">
+        <span aria-hidden="true">←</span>
+        Back to Dashboard
+    </a>
+
+    <!-- Case header -->
+    <header class="case-hero">
+        <div>
+            <div class="case-eyebrow">
+                <span aria-hidden="true">◈</span>
+                Return Intelligence Platform
+            </div>
+
+            <h1 class="case-title">Return Case #{{ return_request.id }}</h1>
+
+            <p class="case-subtitle">
+                Review the customer request, compare product evidence,
+                examine AI findings, and record the final staff decision.
+            </p>
+        </div>
+
+        <div class="case-hero-side">
+            <span class="case-id-label">Case reference</span>
+            <span class="case-id-value">#{{ return_request.id }}</span>
+
+            {% set current_status = return_request.analysis_status or 'Pending' %}
+            <span class="case-status case-status-{{ current_status|lower|replace(' ', '-') }}">
+                {{ current_status }}
+            </span>
+        </div>
+    </header>
+
+    <!-- Request information -->
+    <div class="case-grid">
+
+        <section class="case-card">
+            <div class="case-section-heading">
+                <div class="case-section-icon" aria-hidden="true">▤</div>
+                <div>
+                    <h2>Return Request Details</h2>
+                    <p>Product and customer information recorded for this case.</p>
+                </div>
+            </div>
+
+            <div class="case-info-row">
+                <span class="case-info-label">Product Name</span>
+                <span class="case-info-value">
+                    {{ return_request.product_name or 'Not provided' }}
+                </span>
+            </div>
+
+            <div class="case-info-row">
+                <span class="case-info-label">Product ID</span>
+                <span class="case-info-value">
+                    {{ return_request.product_id or 'Not provided' }}
+                </span>
+            </div>
+
+            <div class="case-info-row">
+                <span class="case-info-label">Customer</span>
+                <span class="case-info-value">
+                    {{ return_request.user.username if return_request.user else 'Not available' }}
+                </span>
+            </div>
+
+            <div class="case-info-row">
+                <span class="case-info-label">Submitted At</span>
+                <span class="case-info-value">
+                    {% if return_request.created_at %}
+                        {{ return_request.created_at.strftime('%d %b %Y, %I:%M %p') }}
+                    {% else %}
+                        Not available
+                    {% endif %}
+                </span>
+            </div>
+
+            <div class="case-info-row">
+                <span class="case-info-label">AI Analysis Status</span>
+                <span class="case-info-value">
+                    <span class="case-status case-status-{{ current_status|lower|replace(' ', '-') }}">
+                        {{ current_status }}
+                    </span>
+                </span>
+            </div>
+        </section>
+
+        <section class="case-card">
+            <div class="case-section-heading">
+                <div class="case-section-icon" aria-hidden="true">◎</div>
+                <div>
+                    <h2>Customer Explanation</h2>
+                    <p>The reason and explanation submitted with the return request.</p>
+                </div>
+            </div>
+
+            <span class="case-info-label">Customer-selected reason</span>
+
+            <div class="case-reason-highlight" style="margin: 8px 0 18px;">
+                {{ return_request.selected_reason or 'Not specified' }}
+            </div>
+
+            <span class="case-info-label" style="margin-bottom: 9px;">
+                Customer comments
+            </span>
+
+            <div class="case-comment">{{ return_request.reason_comment or 'The customer did not provide an additional explanation.' }}</div>
+
+            <div class="case-note">
+                <span class="case-note-symbol" aria-hidden="true">i</span>
+                <span>
+                    Treat the customer's explanation as one source of information.
+                    Evaluate it together with the submitted images and inspection findings.
+                </span>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- Listing images -->
+    <section class="case-card">
+        <div class="case-section-heading">
+            <div class="case-section-icon" aria-hidden="true">▧</div>
+            <div>
+                <h2>Product Listing Images</h2>
+                <p>Reference images associated with the listed product.</p>
+            </div>
+        </div>
+
+        {% if listing_images %}
+            <div class="case-image-grid">
+                {% for image in listing_images %}
+                    <div class="case-image-item">
+                        <a class="case-image-link"
+                           href="{{ url_for('view_return_image', image_id=image.id) }}"
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           aria-label="Open listing image {{ loop.index }} in a new tab">
+                            <img
+                                class="case-evidence-image"
+                                src="{{ url_for('view_return_image', image_id=image.id) }}"
+                                alt="Product listing image {{ loop.index }}"
+                                loading="lazy"
+                            >
+                            <span class="case-image-open" aria-hidden="true">↗</span>
+                        </a>
+
+                        <div class="case-image-caption">
+                            <strong>Listing image {{ loop.index }}</strong>
+                            {{ image.original_filename or 'Product reference image' }}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="case-empty">
+                <span class="case-empty-icon" aria-hidden="true">▧</span>
+                <strong>No listing images available</strong>
+                <span>There are no product reference images attached to this case.</span>
+            </div>
+        {% endif %}
+    </section>
+
+    <!-- Customer evidence -->
+    <section class="case-card">
+        <div class="case-section-heading">
+            <div class="case-section-icon" aria-hidden="true">⌕</div>
+            <div>
+                <h2>Customer-Submitted Evidence</h2>
+                <p>Images supplied by the customer to support the return claim.</p>
+            </div>
+        </div>
+
+        {% if received_images %}
+            <div class="case-image-grid">
+                {% for image in received_images %}
+                    <div class="case-image-item">
+                        <a class="case-image-link"
+                           href="{{ url_for('view_return_image', image_id=image.id) }}"
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           aria-label="Open customer evidence image {{ loop.index }} in a new tab">
+                            <img
+                                class="case-evidence-image"
+                                src="{{ url_for('view_return_image', image_id=image.id) }}"
+                                alt="Customer-submitted evidence image {{ loop.index }}"
+                                loading="lazy"
+                            >
+                            <span class="case-image-open" aria-hidden="true">↗</span>
+                        </a>
+
+                        <div class="case-image-caption">
+                            <strong>Evidence image {{ loop.index }}</strong>
+                            {{ image.original_filename or 'Customer-submitted image' }}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="case-empty">
+                <span class="case-empty-icon" aria-hidden="true">⌕</span>
+                <strong>No customer evidence images</strong>
+                <span>Staff should consider this evidence limitation during verification.</span>
+            </div>
+        {% endif %}
+    </section>
+
+    <!-- AI analysis -->
+    <section class="case-card">
+        <div class="case-section-heading">
+            <div class="case-section-icon" aria-hidden="true">✳</div>
+            <div>
+                <h2>AI Evidence Analysis</h2>
+                <p>Review the model's suggested reason and supporting evidence.</p>
+            </div>
+        </div>
+
+        <div class="case-ai-intro">
+            <div class="case-ai-icon" aria-hidden="true">✳</div>
+            <div>
+                <strong>AI-assisted investigation</strong>
+                <p>
+                    AI findings are recommendations to support the investigation.
+                    Staff must review the available evidence before confirming the
+                    actual return reason.
+                </p>
+            </div>
+        </div>
+
+        {% if analysis and analysis.predicted_reason %}
+            <div class="case-analysis-grid">
+
+                <div class="case-analysis-item case-analysis-prediction">
+                    <h3>AI-suggested reason</h3>
+                    <div class="case-analysis-value">
+                        {{ analysis.predicted_reason }}
+                    </div>
+                </div>
+
+                <div class="case-analysis-item">
+                    <h3>Evidence strength</h3>
+                    {% set evidence_level = analysis.evidence_strength or 'Not assessed' %}
+                    <span class="case-status case-status-{{ evidence_level|lower|replace(' ', '-') }}">
+                        {{ evidence_level }}
+                    </span>
+                </div>
+
+                <div class="case-analysis-item">
+                    <h3>Model confidence</h3>
+
+                    {% if analysis.confidence is not none %}
+                        {% set confidence_value = [0, [analysis.confidence|float, 100]|min]|max %}
+
+                        <div class="case-confidence">
+                            <span class="case-confidence-number">
+                                {{ "%.2f"|format(confidence_value) }}%
+                            </span>
+                            <span class="case-muted">Model score</span>
+                        </div>
+
+                        <div class="case-confidence-track"
+                             role="progressbar"
+                             aria-label="Model confidence"
+                             aria-valuemin="0"
+                             aria-valuemax="100"
+                             aria-valuenow="{{ confidence_value }}">
+                            <div class="case-confidence-fill"
+                                 style="width: {{ confidence_value }}%;">
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="case-analysis-value">Not available</div>
+                    {% endif %}
+
+                    <p class="case-field-help">
+                        Confidence is a model output, not a guarantee that the prediction is correct.
+                    </p>
+                </div>
+
+                <div class="case-analysis-item">
+                    <h3>Supporting evidence</h3>
+                    <div class="case-analysis-value">{{ analysis.supporting_evidence or 'No supporting evidence recorded.' }}</div>
+                </div>
+
+                <div class="case-analysis-item">
+                    <h3>Conflicting evidence</h3>
+                    <div class="case-analysis-value">{{ analysis.conflicting_evidence or 'No conflicting evidence recorded.' }}</div>
+                </div>
+
+                <div class="case-analysis-item">
+                    <h3>Analysis notes</h3>
+                    <div class="case-analysis-value">{{ analysis.analysis_notes or 'No additional analysis notes recorded.' }}</div>
+                </div>
+
+            </div>
+        {% else %}
+            <div class="case-empty-analysis">
+                <h3>AI prediction is not available</h3>
+                <p>
+                    No AI-suggested reason has been recorded for this case yet.
+                    You can check the analysis workflow using the action below.
+                </p>
+
+                <form
+                    method="POST"
+                    action="{{ url_for('analyze_return', return_id=return_request.id) }}"
+                >
+                    <input
+                        type="hidden"
+                        name="csrf_token"
+                        value="{{ csrf_token() }}"
+                    >
+
+                    <button class="case-button case-button-secondary" type="submit">
+                        Check AI Analysis Status
+                        <span aria-hidden="true">→</span>
+                    </button>
+                </form>
+            </div>
+        {% endif %}
+    </section>
+
+    <!-- Staff verification -->
+    <section class="case-card">
+        <div class="case-section-heading">
+            <div class="case-section-icon" aria-hidden="true">✓</div>
+            <div>
+                <h2>Staff Verification</h2>
+                <p>Record the final reason after reviewing the case evidence.</p>
+            </div>
+        </div>
+
+        <div class="case-review-banner">
+            <strong>Manual review required.</strong>
+            Select the reason that best matches the actual return cause. Your
+            decision is recorded separately from the customer's original
+            selection and the AI prediction.
+        </div>
+
+        {% if analysis and analysis.review_status %}
+            <div class="case-info-row" style="margin-bottom: 18px;">
+                <span class="case-info-label">Current review status</span>
+                <span class="case-info-value">
+                    {% set review_status = analysis.review_status %}
+                    <span class="case-status case-status-{{ review_status|lower|replace(' ', '-') }}">
+                        {{ review_status }}
+                    </span>
+                </span>
+            </div>
+        {% endif %}
+
+        <div class="case-comparison">
+            <div class="case-comparison-item">
+                <span class="case-comparison-label">Customer-selected reason</span>
+                <span class="case-comparison-value">
+                    {{ return_request.selected_reason or 'Not specified' }}
+                </span>
+            </div>
+
+            <div class="case-comparison-item">
+                <span class="case-comparison-label">AI-suggested reason</span>
+                <span class="case-comparison-value">
+                    {% if analysis and analysis.predicted_reason %}
+                        {{ analysis.predicted_reason }}
+                    {% else %}
+                        Not available
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+
+        <form
+            method="POST"
+            action="{{ url_for('review_return', return_id=return_request.id) }}"
+        >
+            <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token() }}"
+            >
+
+            <div class="case-form-group">
+                <label for="verified_reason">
+                    Staff-confirmed actual reason
+                    <span class="case-required">*</span>
+                </label>
+
+                <select id="verified_reason" name="verified_reason" required>
+                    <option value="">Select the confirmed reason</option>
+
+                    {% for reason in return_reasons %}
+                        <option
+                            value="{{ reason }}"
+                            {% if analysis and analysis.verified_reason == reason %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ reason }}
+                        </option>
+                    {% endfor %}
+                </select>
+
+                <p class="case-field-help">
+                    Choose the reason supported by your investigation, even when
+                    it differs from the customer's selection or the AI prediction.
+                </p>
+            </div>
+
+            <div class="case-form-group">
+                <label for="reviewer_notes">Investigation notes</label>
+
+                <textarea
+                    id="reviewer_notes"
+                    name="reviewer_notes"
+                    maxlength="3000"
+                    placeholder="Describe the evidence you inspected, what you observed, and why you selected this reason."
+                >{{ analysis.reviewer_notes if analysis and analysis.reviewer_notes else '' }}</textarea>
+
+                <p class="case-field-help">
+                    Record the observations that support your decision. Maximum 3,000 characters.
+                </p>
+            </div>
+
+            <div class="case-button-row">
+                <button class="case-button case-button-primary" type="submit">
+                    <span aria-hidden="true">✓</span>
+                    Save Staff Review
+                </button>
+
+                <a class="case-button case-button-secondary"
+                   href="{{ url_for('admin_dashboard') }}">
+                    Cancel / Back to Dashboard
+                </a>
+            </div>
+        </form>
+
+        {% if analysis and analysis.verified_reason %}
+            <div class="case-review-result">
+                <h3>Recorded Verification Result</h3>
+
+                <div class="case-info-row">
+                    <span class="case-info-label">Staff-confirmed reason</span>
+                    <span class="case-info-value">
+                        {{ analysis.verified_reason }}
+                    </span>
+                </div>
+
+                <div class="case-info-row">
+                    <span class="case-info-label">Customer comparison</span>
+                    <span class="case-info-value">
+                        {% if analysis.verified_reason == return_request.selected_reason %}
+                            <span class="case-status case-status-match">
+                                Reason Matches
+                            </span>
+                        {% else %}
+                            <span class="case-status case-status-mismatch">
+                                Reason Mismatch
+                            </span>
+                        {% endif %}
+                    </span>
+                </div>
+
+                {% if analysis.predicted_reason %}
+                    <div class="case-info-row">
+                        <span class="case-info-label">AI prediction comparison</span>
+                        <span class="case-info-value">
+                            {% if analysis.verified_reason == analysis.predicted_reason %}
+                                <span class="case-status case-status-match">
+                                    AI Suggestion Matches
+                                </span>
+                            {% else %}
+                                <span class="case-status case-status-mismatch">
+                                    AI Suggestion Differs
+                                </span>
+                            {% endif %}
+                        </span>
+                    </div>
+                {% endif %}
+
+                <div class="case-info-row">
+                    <span class="case-info-label">Reviewer notes</span>
+                    <span class="case-info-value">
+                        {{ analysis.reviewer_notes or 'No reviewer notes recorded.' }}
+                    </span>
+                </div>
+
+                {% if analysis.reviewed_at %}
+                    <div class="case-info-row">
+                        <span class="case-info-label">Reviewed at</span>
+                        <span class="case-info-value">
+                            {{ analysis.reviewed_at.strftime('%d %b %Y, %I:%M %p') }}
+                        </span>
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+    </section>
+
+</div>
+{% endblock %}

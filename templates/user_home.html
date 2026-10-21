@@ -1,0 +1,1514 @@
+
+{% extends "base.html" %}
+
+{% block title %}My Workspace | Return Intelligence{% endblock %}
+
+{% block styles %}
+.user-page {
+    --user-primary: #4f46e5;
+    --user-primary-dark: #3730a3;
+    --user-muted: #667085;
+    --user-border: #e5e9f2;
+    --user-radius: 16px;
+    max-width: 1320px;
+    margin: 0 auto;
+}
+
+.user-page * {
+    box-sizing: border-box;
+}
+
+.user-page .welcome-banner {
+    position: relative;
+    overflow: hidden;
+    padding: 32px;
+    margin-bottom: 25px;
+    border: 1px solid #e0e7ff;
+    border-radius: 20px;
+    background: linear-gradient(115deg, #ffffff 0%, #f0f3ff 68%, #e8edff 100%);
+}
+
+.user-page .welcome-banner::after {
+    content: "";
+    position: absolute;
+    width: 220px;
+    height: 220px;
+    right: -65px;
+    top: -95px;
+    border-radius: 50%;
+    background: rgba(99, 102, 241, 0.08);
+    pointer-events: none;
+}
+
+.user-page .welcome-content {
+    position: relative;
+    z-index: 1;
+}
+
+.user-page .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 10px;
+    color: var(--user-primary);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1.15px;
+    text-transform: uppercase;
+}
+
+.user-page .eyebrow-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #6366f1;
+}
+
+.user-page .welcome-banner h1 {
+    margin: 0;
+    color: #172033;
+    font-size: clamp(27px, 4vw, 36px);
+    font-weight: 800;
+    letter-spacing: -1.1px;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.user-page .welcome-banner p {
+    max-width: 660px;
+    margin: 12px 0 0;
+    color: #596579;
+    font-size: 14px;
+    line-height: 1.8;
+}
+
+.user-page .welcome-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.user-page .meta-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 11px;
+    border: 1px solid #e0e7ff;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.8);
+    color: #475467;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.user-page .user-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    align-items: start;
+    gap: 22px;
+    margin-bottom: 25px;
+}
+
+.user-page .content-card {
+    min-width: 0;
+    border: 1px solid var(--user-border);
+    border-radius: var(--user-radius);
+    background: #ffffff;
+    box-shadow: 0 4px 18px rgba(23, 32, 51, 0.035);
+}
+
+.user-page .form-card {
+    padding: 27px;
+}
+
+.user-page .section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 25px;
+}
+
+.user-page .section-heading h2 {
+    margin: 0;
+    color: #172033;
+    font-size: 22px;
+    font-weight: 750;
+    letter-spacing: -0.5px;
+    line-height: 1.4;
+}
+
+.user-page .section-heading p {
+    margin: 5px 0 0;
+    color: var(--user-muted);
+    font-size: 13px;
+}
+
+.user-page .muted {
+    color: var(--user-muted);
+}
+
+.user-page .form-section {
+    margin-top: 25px;
+}
+
+.user-page .form-section:first-of-type {
+    margin-top: 0;
+}
+
+.user-page .section-title {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    margin: 0 0 17px;
+    color: #202b3c;
+    font-size: 15px;
+    font-weight: 750;
+}
+
+.user-page .section-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 31px;
+    height: 31px;
+    flex: 0 0 31px;
+    border: 1px solid #e0e7ff;
+    border-radius: 9px;
+    background: #eef2ff;
+    color: #4338ca;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.user-page .section-divider {
+    height: 1px;
+    margin: 24px 0;
+    border: 0;
+    background: #edf0f5;
+}
+
+.user-page .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 17px;
+}
+
+.user-page .form-group {
+    min-width: 0;
+    margin-bottom: 18px;
+}
+
+.user-page .form-group:last-child {
+    margin-bottom: 0;
+}
+
+.user-page .form-group label {
+    display: block;
+    margin-bottom: 7px;
+    color: #344054;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.user-page .required-mark {
+    color: #dc2626;
+}
+
+.user-page input[type="text"],
+.user-page select,
+.user-page textarea {
+    display: block;
+    width: 100%;
+    min-height: 45px;
+    padding: 11px 13px;
+    border: 1px solid #d9deea;
+    border-radius: 10px;
+    outline: none;
+    background: #ffffff;
+    color: #172033;
+    font-size: 13px;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.user-page input[type="text"]::placeholder,
+.user-page textarea::placeholder {
+    color: #98a2b3;
+}
+
+.user-page input[type="text"]:focus,
+.user-page select:focus,
+.user-page textarea:focus {
+    border-color: #818cf8;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.user-page input[readonly] {
+    background: #f8fafc;
+    color: #667085;
+    cursor: default;
+}
+
+.user-page textarea {
+    min-height: 120px;
+    resize: vertical;
+    line-height: 1.7;
+}
+
+.user-page select {
+    cursor: pointer;
+}
+
+.user-page .field-note {
+    margin: 6px 0 10px;
+    color: #7b8495;
+    font-size: 12px;
+    line-height: 1.65;
+}
+
+.user-page .character-counter {
+    margin-top: 7px;
+    color: #7b8495;
+    font-size: 11px;
+    text-align: right;
+}
+
+.user-page .upload-zone {
+    padding: 17px;
+    border: 1px dashed #c7cde0;
+    border-radius: 12px;
+    background: #fafbff;
+    transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.user-page .upload-zone:focus-within {
+    border-color: #818cf8;
+    background: #f6f7ff;
+}
+
+.user-page .upload-intro {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 13px;
+}
+
+.user-page .upload-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 39px;
+    height: 39px;
+    flex: 0 0 39px;
+    border: 1px solid #e0e7ff;
+    border-radius: 11px;
+    background: #eef2ff;
+    color: #4f46e5;
+    font-size: 18px;
+}
+
+.user-page .upload-intro strong {
+    display: block;
+    margin-bottom: 3px;
+    color: #344054;
+    font-size: 13px;
+}
+
+.user-page .upload-intro p {
+    margin: 0;
+    color: #7b8495;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.user-page input[type="file"] {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    padding: 9px;
+    border: 1px solid #e0e4ed;
+    border-radius: 9px;
+    background: #ffffff;
+    color: #667085;
+    font-size: 12px;
+}
+
+.user-page input[type="file"]::file-selector-button {
+    margin-right: 10px;
+    padding: 8px 11px;
+    border: 0;
+    border-radius: 7px;
+    background: #eef2ff;
+    color: #4338ca;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.user-page .image-preview {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(115px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.user-page .preview-item {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid #e5e9f2;
+    border-radius: 10px;
+    background: #ffffff;
+}
+
+.user-page .preview-item img {
+    display: block;
+    width: 100%;
+    height: 105px;
+    object-fit: cover;
+    background: #f2f4f7;
+}
+
+.user-page .preview-item span {
+    display: block;
+    padding: 8px;
+    overflow: hidden;
+    color: #596579;
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-page .upload-guidelines {
+    margin-top: 18px;
+    padding: 15px 16px;
+    border: 1px solid #e0e7ff;
+    border-radius: 11px;
+    background: #f7f8ff;
+}
+
+.user-page .upload-guidelines strong {
+    display: block;
+    margin-bottom: 8px;
+    color: #3730a3;
+    font-size: 12px;
+}
+
+.user-page .upload-guidelines ul {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 16px;
+    margin: 0;
+    padding-left: 18px;
+    color: #596579;
+    font-size: 11px;
+    line-height: 1.6;
+}
+
+.user-page .primary-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    min-height: 47px;
+    padding: 12px 19px;
+    border: 1px solid #4f46e5;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 750;
+    cursor: pointer;
+    box-shadow: 0 5px 12px rgba(79, 70, 229, 0.15);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.user-page .primary-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgba(79, 70, 229, 0.2);
+}
+
+.user-page .primary-button:disabled {
+    opacity: 0.65;
+    cursor: wait;
+    transform: none;
+}
+
+.user-page .full-width {
+    width: 100%;
+    margin-top: 22px;
+}
+
+.user-page .security-note {
+    margin: 12px 0 0;
+    color: #7b8495;
+    font-size: 11px;
+    line-height: 1.7;
+    text-align: center;
+}
+
+.user-page .request-info {
+    position: sticky;
+    top: 95px;
+    padding: 23px;
+}
+
+.user-page .info-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    margin-bottom: 16px;
+    border: 1px solid #e0e7ff;
+    border-radius: 14px;
+    background: #eef2ff;
+    color: #4f46e5;
+    font-size: 24px;
+}
+
+.user-page .request-info h3 {
+    margin: 0;
+    color: #202b3c;
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.35px;
+}
+
+.user-page .request-info > p {
+    margin: 9px 0 22px;
+    color: #667085;
+    font-size: 12px;
+    line-height: 1.8;
+}
+
+.user-page .info-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 15px 0;
+    border-top: 1px solid #edf0f5;
+}
+
+.user-page .info-step > span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 29px;
+    height: 29px;
+    flex: 0 0 29px;
+    border-radius: 9px;
+    background: #f1f3f9;
+    color: #475467;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.user-page .info-step strong {
+    display: block;
+    margin-bottom: 3px;
+    color: #344054;
+    font-size: 12px;
+}
+
+.user-page .info-step small {
+    display: block;
+    color: #7b8495;
+    font-size: 11px;
+    line-height: 1.6;
+}
+
+.user-page .info-disclaimer {
+    margin-top: 13px;
+    padding: 12px;
+    border: 1px solid #e5e9f2;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #667085;
+    font-size: 11px;
+    line-height: 1.7;
+}
+
+.user-page .history-card {
+    overflow: hidden;
+}
+
+.user-page .history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 24px 26px;
+    border-bottom: 1px solid #edf0f5;
+}
+
+.user-page .history-header h2 {
+    margin: 0;
+    color: #172033;
+    font-size: 21px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+}
+
+.user-page .history-header p {
+    margin: 5px 0 0;
+    color: #667085;
+    font-size: 12px;
+}
+
+.user-page .count-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 11px;
+    border: 1px solid #e0e7ff;
+    border-radius: 9px;
+    background: #eef2ff;
+    color: #4338ca;
+    font-size: 11px;
+    font-weight: 750;
+    white-space: nowrap;
+}
+
+.user-page .table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.user-page .data-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 12px;
+    text-align: left;
+}
+
+.user-page .data-table th {
+    padding: 13px 16px;
+    border-bottom: 1px solid #e9edf4;
+    background: #f8fafc;
+    color: #667085;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.45px;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.user-page .data-table td {
+    padding: 15px 16px;
+    border-bottom: 1px solid #edf0f5;
+    color: #475467;
+    vertical-align: middle;
+}
+
+.user-page .data-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.user-page .data-table tbody tr {
+    transition: background 0.15s ease;
+}
+
+.user-page .data-table tbody tr:hover {
+    background: #fafbff;
+}
+
+.user-page .request-reference {
+    color: #4338ca;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.user-page .product-name {
+    display: block;
+    min-width: 120px;
+    max-width: 220px;
+    color: #273449;
+    font-size: 12px;
+    font-weight: 750;
+    overflow-wrap: anywhere;
+}
+
+.user-page .table-subtitle {
+    display: block;
+    margin-top: 4px;
+    color: #8992a3;
+    font-size: 10px;
+    overflow-wrap: anywhere;
+}
+
+.user-page .reason-cell {
+    min-width: 135px;
+}
+
+.user-page .date-cell {
+    min-width: 145px;
+    white-space: nowrap;
+}
+
+.user-page .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 9px;
+    border: 1px solid #e5e7eb;
+    border-radius: 999px;
+    background: #f9fafb;
+    color: #475467;
+    font-size: 10px;
+    font-weight: 750;
+    white-space: nowrap;
+}
+
+.user-page .status-badge::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    flex: 0 0 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.user-page .status-badge.pending {
+    border-color: #fedf89;
+    background: #fffaeb;
+    color: #b54708;
+}
+
+.user-page .status-badge.analyzed {
+    border-color: #abefc6;
+    background: #ecfdf3;
+    color: #067647;
+}
+
+.user-page .status-badge.processing {
+    border-color: #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.user-page .status-badge.failed {
+    border-color: #fecdca;
+    background: #fef3f2;
+    color: #b42318;
+}
+
+.user-page .status-badge.unknown {
+    border-color: #e5e7eb;
+    background: #f9fafb;
+    color: #667085;
+}
+
+.user-page .table-thumbnails {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 75px;
+}
+
+.user-page .table-thumbnails a {
+    display: block;
+    width: 37px;
+    height: 37px;
+    flex: 0 0 37px;
+    overflow: hidden;
+    border: 1px solid #e5e9f2;
+    border-radius: 8px;
+    background: #f8fafc;
+    transition: transform 0.15s ease;
+}
+
+.user-page .table-thumbnails a:hover {
+    transform: scale(1.07);
+}
+
+.user-page .table-thumbnails img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.user-page .no-images {
+    color: #98a2b3;
+    font-size: 11px;
+}
+
+.user-page .empty-state {
+    padding: 48px 20px;
+    text-align: center;
+}
+
+.user-page .empty-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 15px;
+    border: 1px solid #e5e9f2;
+    border-radius: 18px;
+    background: #f8fafc;
+    font-size: 27px;
+}
+
+.user-page .empty-state h3 {
+    margin: 0;
+    color: #344054;
+    font-size: 17px;
+    font-weight: 750;
+}
+
+.user-page .empty-state p {
+    margin: 7px 0 0;
+    color: #7b8495;
+    font-size: 12px;
+}
+
+.user-page .form-error {
+    margin: 10px 0 0;
+    color: #b42318;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.user-page .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+@media (max-width: 1000px) {
+    .user-page .user-layout {
+        grid-template-columns: minmax(0, 1fr) 260px;
+        gap: 16px;
+    }
+
+    .user-page .form-card {
+        padding: 22px;
+    }
+
+    .user-page .request-info {
+        padding: 19px;
+    }
+}
+
+@media (max-width: 780px) {
+    .user-page .user-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .user-page .request-info {
+        position: static;
+    }
+
+    .user-page .info-steps {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .user-page .info-step {
+        padding: 12px;
+        border: 1px solid #edf0f5;
+        border-radius: 10px;
+    }
+
+    .user-page .info-disclaimer {
+        margin-top: 12px;
+    }
+}
+
+@media (max-width: 560px) {
+    .user-page .welcome-banner {
+        padding: 23px 19px;
+        border-radius: 15px;
+    }
+
+    .user-page .welcome-banner h1 {
+        font-size: 27px;
+    }
+
+    .user-page .form-card {
+        padding: 18px 15px;
+    }
+
+    .user-page .section-heading h2,
+    .user-page .history-header h2 {
+        font-size: 19px;
+    }
+
+    .user-page .form-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 0;
+    }
+
+    .user-page .upload-guidelines ul {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .user-page .image-preview {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .user-page .info-steps {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .user-page .info-step {
+        border: 0;
+        border-top: 1px solid #edf0f5;
+        border-radius: 0;
+    }
+
+    .user-page .history-header {
+        padding: 19px 16px;
+    }
+
+    .user-page .data-table th,
+    .user-page .data-table td {
+        padding: 12px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .user-page *,
+    .user-page *::before,
+    .user-page *::after {
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+{% endblock %}
+
+{% block content %}
+<div class="user-page">
+
+    <!-- Welcome banner -->
+    <section class="welcome-banner">
+        <div class="welcome-content">
+            <span class="eyebrow">
+                <span class="eyebrow-dot"></span>
+                Customer Workspace
+            </span>
+
+            <h1>Hello, {{ current_user.username }}!</h1>
+
+            <p>
+                Submit your product details, describe your return reason,
+                and provide clear images to support evidence-based return
+                analysis.
+            </p>
+
+            <div class="welcome-meta">
+                <span class="meta-pill">
+                    <span aria-hidden="true">✓</span>
+                    Signed in securely
+                </span>
+                <span class="meta-pill">
+                    <span aria-hidden="true">▧</span>
+                    User ID: {{ current_user.id }}
+                </span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Form and information panel -->
+    <div class="user-layout">
+
+        <section class="content-card form-card">
+            <div class="section-heading">
+                <div>
+                    <span class="eyebrow">New Submission</span>
+                    <h2>Return Request Form</h2>
+                    <p>Complete each section before submitting your request.</p>
+                </div>
+            </div>
+
+            <form
+                action="{{ url_for('user_home') }}"
+                method="POST"
+                enctype="multipart/form-data"
+                id="return-form"
+            >
+                <input
+                    type="hidden"
+                    name="csrf_token"
+                    value="{{ csrf_token() }}"
+                >
+
+                <!-- Customer details -->
+                <section class="form-section">
+                    <h3 class="section-title">
+                        <span class="section-number">01</span>
+                        Customer Details
+                    </h3>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="username">Username</label>
+                            <input
+                                id="username"
+                                type="text"
+                                value="{{ current_user.username }}"
+                                readonly
+                            >
+                        </div>
+
+                        <div class="form-group">
+                            <label for="user-id">User ID</label>
+                            <input
+                                id="user-id"
+                                type="text"
+                                value="{{ current_user.id }}"
+                                readonly
+                            >
+                        </div>
+                    </div>
+
+                    <p class="field-note">
+                        Your account information is populated automatically.
+                    </p>
+                </section>
+
+                <hr class="section-divider">
+
+                <!-- Product details -->
+                <section class="form-section">
+                    <h3 class="section-title">
+                        <span class="section-number">02</span>
+                        Product Details
+                    </h3>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="product_id">
+                                Product ID <span class="required-mark">*</span>
+                            </label>
+                            <input
+                                id="product_id"
+                                name="product_id"
+                                type="text"
+                                maxlength="100"
+                                placeholder="e.g. PROD-1001"
+                                required
+                            >
+                        </div>
+
+                        <div class="form-group">
+                            <label for="product_name">
+                                Product Name <span class="required-mark">*</span>
+                            </label>
+                            <input
+                                id="product_name"
+                                name="product_name"
+                                type="text"
+                                maxlength="200"
+                                placeholder="Enter product name"
+                                required
+                            >
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="listing_image">
+                            Product Listing Image
+                            <span class="required-mark">*</span>
+                        </label>
+
+                        <div class="upload-zone">
+                            <div class="upload-intro">
+                                <div class="upload-icon" aria-hidden="true">▧</div>
+                                <div>
+                                    <strong>Reference product image</strong>
+                                    <p>
+                                        Upload the product image shown in the
+                                        original listing for comparison.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <input
+                                id="listing_image"
+                                name="listing_image"
+                                type="file"
+                                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                                required
+                                aria-describedby="listing-help"
+                            >
+
+                            <p class="field-note" id="listing-help">
+                                Supported formats: JPG, PNG and WEBP.
+                            </p>
+
+                            <div
+                                id="listing-preview"
+                                class="image-preview"
+                                aria-live="polite"
+                            ></div>
+                        </div>
+                    </div>
+                </section>
+
+                <hr class="section-divider">
+
+                <!-- Return reason -->
+                <section class="form-section">
+                    <h3 class="section-title">
+                        <span class="section-number">03</span>
+                        Return Reason
+                    </h3>
+
+                    <div class="form-group">
+                        <label for="selected_reason">
+                            Customer-Selected Reason
+                            <span class="required-mark">*</span>
+                        </label>
+
+                        <select
+                            id="selected_reason"
+                            name="selected_reason"
+                            required
+                        >
+                            <option value="">Select a return reason</option>
+                            {% for reason in return_reasons %}
+                            <option value="{{ reason }}">{{ reason }}</option>
+                            {% endfor %}
+                        </select>
+
+                        <p class="field-note">
+                            Choose the reason that best describes your
+                            experience with the product.
+                        </p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="reason_comment">
+                            Explain the Problem
+                            <span class="required-mark">*</span>
+                        </label>
+
+                        <textarea
+                            id="reason_comment"
+                            name="reason_comment"
+                            rows="4"
+                            maxlength="3000"
+                            placeholder="Describe what you received and why you are returning it..."
+                            required
+                        ></textarea>
+
+                        <div class="character-counter">
+                            <span id="comment-count">0</span>/3000 characters
+                        </div>
+                    </div>
+                </section>
+
+                <hr class="section-divider">
+
+                <!-- Received product evidence -->
+                <section class="form-section">
+                    <h3 class="section-title">
+                        <span class="section-number">04</span>
+                        Received Product Evidence
+                    </h3>
+
+                    <div class="form-group">
+                        <label for="received_images">
+                            Photos of the Received Product
+                            <span class="required-mark">*</span>
+                        </label>
+
+                        <div class="upload-zone">
+                            <div class="upload-intro">
+                                <div class="upload-icon" aria-hidden="true">▣</div>
+                                <div>
+                                    <strong>Upload product photographs</strong>
+                                    <p>
+                                        Add 1–5 photos from different angles.
+                                        Include packaging, identifying details
+                                        or visible damage when relevant.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <input
+                                id="received_images"
+                                name="received_images"
+                                type="file"
+                                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                                multiple
+                                required
+                                aria-describedby="received-help"
+                            >
+
+                            <p class="field-note" id="received-help">
+                                Select between 1 and 5 images. Each image
+                                must be 8 MB or smaller.
+                            </p>
+
+                            <div
+                                id="received-preview"
+                                class="image-preview"
+                                aria-live="polite"
+                            ></div>
+                        </div>
+                    </div>
+
+                    <div class="upload-guidelines">
+                        <strong>Before submitting your request</strong>
+                        <ul>
+                            <li>Use clear, genuine product photographs.</li>
+                            <li>Include different angles where possible.</li>
+                            <li>Keep each image under 8 MB.</li>
+                            <li>Avoid unrelated or sensitive images.</li>
+                        </ul>
+                    </div>
+                </section>
+
+                <div
+                    id="form-error"
+                    class="form-error"
+                    role="alert"
+                    hidden
+                ></div>
+
+                <button
+                    class="primary-button full-width"
+                    id="submit-button"
+                    type="submit"
+                >
+                    Submit Return Request
+                    <span aria-hidden="true">→</span>
+                </button>
+
+                <p class="security-note">
+                    Your submission records the reported reason and evidence.
+                    It does not automatically approve or reject a return.
+                </p>
+            </form>
+        </section>
+
+        <!-- Information panel -->
+        <aside class="content-card request-info">
+            <div class="info-icon" aria-hidden="true">✦</div>
+
+            <h3>Return Insight AI</h3>
+
+            <p>
+                Product information and photographs help support the
+                investigation of return reasons and evidence quality.
+            </p>
+
+            <div class="info-steps">
+                <div class="info-step">
+                    <span>1</span>
+                    <div>
+                        <strong>Submit details</strong>
+                        <small>Product information and return explanation</small>
+                    </div>
+                </div>
+
+                <div class="info-step">
+                    <span>2</span>
+                    <div>
+                        <strong>Examine evidence</strong>
+                        <small>Product images and reported reason</small>
+                    </div>
+                </div>
+
+                <div class="info-step">
+                    <span>3</span>
+                    <div>
+                        <strong>Review the result</strong>
+                        <small>Analysis status and staff verification</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-disclaimer">
+                <strong>Important:</strong> An AI prediction is not a final
+                decision. Return-reason verification may require human review.
+            </div>
+        </aside>
+    </div>
+
+    <!-- Return request history -->
+    <section class="content-card history-card">
+        <div class="history-header">
+            <div>
+                <span class="eyebrow">Your Activity</span>
+                <h2>My Return Requests</h2>
+                <p>Review the requests you have submitted.</p>
+            </div>
+
+            <span class="count-pill">
+                {{ my_requests|length }} request{% if my_requests|length != 1 %}s{% endif %}
+            </span>
+        </div>
+
+        {% if my_requests %}
+        <div class="table-wrapper">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Request ID</th>
+                        <th>Product</th>
+                        <th>Selected Reason</th>
+                        <th>Submitted At (UTC)</th>
+                        <th>Analysis Status</th>
+                        <th>Images</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for item in my_requests %}
+                    <tr>
+                        <td>
+                            <span class="request-reference">
+                                #RNT-{{ "%04d"|format(item.id) }}
+                            </span>
+                        </td>
+
+                        <td>
+                            <span class="product-name">
+                                {{ item.product_name }}
+                            </span>
+                            <small class="table-subtitle">
+                                {{ item.product_id }}
+                            </small>
+                        </td>
+
+                        <td class="reason-cell">
+                            {{ item.selected_reason }}
+                        </td>
+
+                        <td class="date-cell">
+                            {{ item.created_at.strftime("%d %b %Y, %H:%M") }}
+                        </td>
+
+                        <td>
+                            {% set status = (item.analysis_status or 'Unknown')|lower %}
+
+                            {% if status == 'pending' %}
+                                <span class="status-badge pending">
+                                    {{ item.analysis_status }}
+                                </span>
+                            {% elif status == 'analyzed' %}
+                                <span class="status-badge analyzed">
+                                    {{ item.analysis_status }}
+                                </span>
+                            {% elif status == 'processing' %}
+                                <span class="status-badge processing">
+                                    {{ item.analysis_status }}
+                                </span>
+                            {% elif status == 'failed' %}
+                                <span class="status-badge failed">
+                                    {{ item.analysis_status }}
+                                </span>
+                            {% else %}
+                                <span class="status-badge unknown">
+                                    {{ item.analysis_status or 'Unknown' }}
+                                </span>
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            {% if item.images %}
+                            <div class="table-thumbnails">
+                                {% for image in item.images %}
+                                <a
+                                    href="{{ url_for('view_return_image', image_id=image.id) }}"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="{{ image.image_type|title }} — open image"
+                                >
+                                    <img
+                                        src="{{ url_for('view_return_image', image_id=image.id) }}"
+                                        alt="{{ image.image_type|title }}"
+                                        loading="lazy"
+                                    >
+                                </a>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <span class="no-images">No images</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon" aria-hidden="true">▣</div>
+            <h3>No return requests yet</h3>
+            <p>
+                Once you submit your first return request, it will appear here.
+            </p>
+        </div>
+        {% endif %}
+    </section>
+</div>
+
+<script>
+(function () {
+    "use strict";
+
+    const commentInput = document.getElementById("reason_comment");
+    const commentCount = document.getElementById("comment-count");
+    const returnForm = document.getElementById("return-form");
+    const formError = document.getElementById("form-error");
+    const submitButton = document.getElementById("submit-button");
+
+    const MAX_FILE_SIZE = 8 * 1024 * 1024;
+    const MAX_RECEIVED_IMAGES = 5;
+    const ALLOWED_TYPES = [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+    ];
+
+    commentInput.addEventListener("input", function () {
+        commentCount.textContent = this.value.length;
+    });
+
+    function showError(message) {
+        formError.textContent = message;
+        formError.hidden = false;
+        formError.scrollIntoView({
+            behavior: "smooth",
+            block: "center"
+        });
+    }
+
+    function clearError() {
+        formError.textContent = "";
+        formError.hidden = true;
+    }
+
+    function validateFiles(files, allowMultiple) {
+        if (!files.length) {
+            return allowMultiple
+                ? "Please select at least one received-product image."
+                : "Please select a product listing image.";
+        }
+
+        if (!allowMultiple && files.length !== 1) {
+            return "Please select exactly one product listing image.";
+        }
+
+        if (allowMultiple && files.length > MAX_RECEIVED_IMAGES) {
+            return "Please select no more than five received-product images.";
+        }
+
+        for (const file of files) {
+            if (!ALLOWED_TYPES.includes(file.type)) {
+                return "Use JPG, PNG or WEBP images only.";
+            }
+
+            if (file.size > MAX_FILE_SIZE) {
+                return "Each image must be 8 MB or smaller.";
+            }
+        }
+
+        return "";
+    }
+
+    function previewImages(input, container, allowMultiple) {
+        input.addEventListener("change", function () {
+            container.replaceChildren();
+            clearError();
+
+            const files = Array.from(this.files || []);
+            const validationMessage = validateFiles(files, allowMultiple);
+
+            if (validationMessage) {
+                if (files.length) {
+                    showError(validationMessage);
+                    this.value = "";
+                }
+                return;
+            }
+
+            for (const file of files) {
+                const wrapper = document.createElement("div");
+                wrapper.className = "preview-item";
+
+                const image = document.createElement("img");
+                image.alt = "Selected image preview";
+
+                const caption = document.createElement("span");
+                caption.textContent = file.name;
+                caption.title = file.name;
+
+                const objectUrl = URL.createObjectURL(file);
+                image.src = objectUrl;
+
+                image.addEventListener("load", function () {
+                    URL.revokeObjectURL(objectUrl);
+                }, { once: true });
+
+                image.addEventListener("error", function () {
+                    URL.revokeObjectURL(objectUrl);
+                    image.alt = "Image preview unavailable";
+                }, { once: true });
+
+                wrapper.append(image, caption);
+                container.appendChild(wrapper);
+            }
+        });
+    }
+
+    previewImages(
+        document.getElementById("listing_image"),
+        document.getElementById("listing-preview"),
+        false
+    );
+
+    previewImages(
+        document.getElementById("received_images"),
+        document.getElementById("received-preview"),
+        true
+    );
+
+    returnForm.addEventListener("submit", function (event) {
+        clearError();
+
+        const listingFiles =
+            document.getElementById("listing_image").files;
+
+        const receivedFiles =
+            document.getElementById("received_images").files;
+
+        const listingError = validateFiles(listingFiles, false);
+        const receivedError = validateFiles(receivedFiles, true);
+
+        if (listingError || receivedError) {
+            event.preventDefault();
+            showError(listingError || receivedError);
+            return;
+        }
+
+        if (!returnForm.checkValidity()) {
+            event.preventDefault();
+            returnForm.reportValidity();
+            return;
+        }
+
+        submitButton.disabled = true;
+        submitButton.textContent = "Submitting Request...";
+    });
+})();
+</script>
+{% endblock %}

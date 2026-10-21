@@ -1,0 +1,247 @@
+```html
+{% extends "base.html" %}
+
+{% block title %}Login | Return Insight AI{% endblock %}
+
+{% block head %}
+<style>
+    .login-wrapper {
+        min-height: 65vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 25px 0;
+    }
+
+    .login-card {
+        width: 100%;
+        max-width: 460px;
+        padding: 32px;
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.07);
+    }
+
+    .login-card h1 {
+        margin: 0 0 8px;
+        text-align: center;
+        color: #172554;
+        font-size: 27px;
+    }
+
+    .login-description {
+        margin: 0 0 25px;
+        text-align: center;
+        color: #6b7280;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+
+    .role-options {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-bottom: 25px;
+    }
+
+    .role-option input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .role-option label {
+        display: block;
+        padding: 16px 10px;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        text-align: center;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+
+    .role-option label:hover {
+        border-color: #93c5fd;
+        background: #f8fbff;
+    }
+
+    .role-option input:checked + label {
+        border-color: #2563eb;
+        background: #eff6ff;
+        color: #1d4ed8;
+    }
+
+    .role-icon {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 27px;
+    }
+
+    .role-title {
+        display: block;
+        font-weight: bold;
+        font-size: 15px;
+    }
+
+    .role-subtitle {
+        display: block;
+        margin-top: 5px;
+        color: #6b7280;
+        font-size: 12px;
+    }
+
+    .form-group {
+        margin-bottom: 18px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 7px;
+        font-size: 14px;
+        font-weight: bold;
+    }
+
+    .form-group input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 15px;
+    }
+
+    .form-group input:focus {
+        outline: none;
+        border-color: #2563eb;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    .login-button {
+        width: 100%;
+        padding: 13px;
+        border: none;
+        border-radius: 8px;
+        background: #2563eb;
+        color: white;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    .login-button:hover {
+        background: #1d4ed8;
+    }
+
+    .login-note {
+        margin-top: 20px;
+        padding: 12px;
+        border-radius: 8px;
+        background: #eff6ff;
+        color: #1e40af;
+        font-size: 12px;
+        line-height: 1.6;
+    }
+
+    @media (max-width: 380px) {
+        .login-card {
+            padding: 22px;
+        }
+
+        .role-options {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-wrapper">
+    <section class="login-card">
+        <h1>Welcome Back</h1>
+
+        <p class="login-description">
+            Choose your account type and sign in to Return Insight AI.
+        </p>
+
+        <form method="POST" action="{{ url_for('login') }}">
+            <input type="hidden" name="csrf_token"
+                   value="{{ csrf_token() }}">
+
+            <div class="role-options">
+                <div class="role-option">
+                    <input
+                        type="radio"
+                        id="user"
+                        name="login_role"
+                        value="user"
+                        checked
+                    >
+
+                    <label for="user">
+                        <span class="role-icon">👤</span>
+                        <span class="role-title">Login as User</span>
+                        <span class="role-subtitle">
+                            Submit and track returns
+                        </span>
+                    </label>
+                </div>
+
+                <div class="role-option">
+                    <input
+                        type="radio"
+                        id="admin"
+                        name="login_role"
+                        value="admin"
+                    >
+
+                    <label for="admin">
+                        <span class="role-icon">🛡️</span>
+                        <span class="role-title">Login as Admin</span>
+                        <span class="role-subtitle">
+                            View insights dashboard
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input
+                    type="text"
+                    id="username"
+                    name="username"
+                    placeholder="Enter your username"
+                    autocomplete="username"
+                    required
+                    autofocus
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    placeholder="Enter your password"
+                    autocomplete="current-password"
+                    required
+                >
+            </div>
+
+            <button type="submit" class="login-button">
+                Sign In
+            </button>
+        </form>
+
+        <div class="login-note">
+            <strong>Return Insight AI</strong><br>
+            Analyze customer-selected return reasons against submitted
+            evidence. AI predictions and human-verified reasons are
+            treated separately.
+        </div>
+    </section>
+</div>
+{% endblock %}
+```

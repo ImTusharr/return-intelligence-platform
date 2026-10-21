@@ -1,0 +1,1632 @@
+
+{% extends "base.html" %}
+
+{% block title %}Return Insight AI | Admin Dashboard{% endblock %}
+
+{% block content %}
+
+<style>
+    .dashboard {
+        --primary: #4f46e5;
+        --primary-light: #eef2ff;
+        --text: #172033;
+        --muted: #64748b;
+        --border: #e2e8f0;
+        --surface: #ffffff;
+        color: var(--text);
+        padding: 24px 0 40px;
+    }
+
+    .dashboard *,
+    .dashboard *::before,
+    .dashboard *::after {
+        box-sizing: border-box;
+    }
+
+    .dashboard-header,
+    .section-heading,
+    .panel-heading {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 14px;
+    }
+
+    .dashboard-header {
+        margin-bottom: 26px;
+    }
+
+    .eyebrow {
+        color: var(--primary);
+        font-size: .76rem;
+        font-weight: 800;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        margin: 0 0 8px;
+    }
+
+    .dashboard-header h1 {
+        margin: 0;
+        font-size: clamp(1.65rem, 3vw, 2.15rem);
+        letter-spacing: -.045em;
+    }
+
+    .dashboard-header p,
+    .section-heading p {
+        color: var(--muted);
+        line-height: 1.6;
+        margin: 8px 0 0;
+    }
+
+    .admin-profile {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        border-radius: 14px;
+        min-width: 0;
+    }
+
+    .admin-avatar {
+        display: grid;
+        place-items: center;
+        width: 42px;
+        height: 42px;
+        flex-shrink: 0;
+        border-radius: 12px;
+        color: var(--primary);
+        background: var(--primary-light);
+        font-weight: 800;
+        font-size: 1.1rem;
+    }
+
+    .admin-profile small {
+        display: block;
+        color: var(--muted);
+        margin-bottom: 3px;
+    }
+
+    .admin-profile strong {
+        overflow-wrap: anywhere;
+    }
+
+    .section-heading {
+        margin: 28px 0 15px;
+    }
+
+    .section-heading h2 {
+        font-size: 1.12rem;
+        margin: 0;
+    }
+
+    .section-heading p {
+        font-size: .87rem;
+        margin-top: 5px;
+    }
+
+    /* KPI cards */
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 15px;
+        align-items: stretch;
+    }
+
+    .stat-card {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        min-height: 165px;
+        padding: 18px;
+        color: inherit;
+        text-decoration: none;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 15px;
+        box-shadow: 0 3px 12px rgba(15, 23, 42, .035);
+    }
+
+    .stat-link {
+        cursor: pointer;
+        transition: transform .18s ease, box-shadow .18s ease,
+                    border-color .18s ease;
+    }
+
+    .stat-link:hover {
+        transform: translateY(-3px);
+        border-color: #a5b4fc;
+        box-shadow: 0 10px 24px rgba(79, 70, 229, .10);
+    }
+
+    .stat-link:focus-visible {
+        outline: 3px solid #a5b4fc;
+        outline-offset: 3px;
+    }
+
+    .stat-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 18px;
+    }
+
+    .stat-label {
+        color: var(--muted);
+        font-size: .82rem;
+        font-weight: 600;
+        line-height: 1.45;
+    }
+
+    .stat-icon {
+        display: grid;
+        place-items: center;
+        width: 36px;
+        height: 36px;
+        flex-shrink: 0;
+        border-radius: 10px;
+        background: #f1f5f9;
+        color: #475569;
+        font-weight: 800;
+    }
+
+    .primary .stat-icon {
+        background: #eef2ff;
+        color: #4f46e5;
+    }
+
+    .warning .stat-icon {
+        background: #fff7ed;
+        color: #c2410c;
+    }
+
+    .success .stat-icon {
+        background: #ecfdf5;
+        color: #047857;
+    }
+
+    .danger .stat-icon {
+        background: #fef2f2;
+        color: #b91c1c;
+    }
+
+    .info .stat-icon {
+        background: #eff6ff;
+        color: #1d4ed8;
+    }
+
+    .stat-value {
+        font-size: 2rem;
+        line-height: 1.1;
+        font-weight: 800;
+        letter-spacing: -.045em;
+        overflow-wrap: anywhere;
+    }
+
+    .stat-foot {
+        margin-top: auto;
+        padding-top: 10px;
+        color: var(--muted);
+        font-size: .77rem;
+        line-height: 1.45;
+    }
+
+    .stat-link .stat-foot {
+        color: var(--primary);
+        font-weight: 700;
+    }
+
+    .stat-link .stat-foot + .stat-foot {
+        padding-top: 5px;
+    }
+
+    /* Panels */
+
+    .panel {
+        min-width: 0;
+        padding: 21px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        box-shadow: 0 3px 12px rgba(15, 23, 42, .035);
+    }
+
+    .charts-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+        align-items: stretch;
+    }
+
+    .panel-heading {
+        align-items: flex-start;
+        margin-bottom: 18px;
+    }
+
+    .panel-heading h3 {
+        margin: 0;
+        font-size: 1rem;
+        line-height: 1.45;
+    }
+
+    .panel-heading p {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: .82rem;
+        line-height: 1.5;
+    }
+
+    .panel-tag {
+        padding: 5px 9px;
+        border-radius: 7px;
+        color: #475569;
+        background: #f1f5f9;
+        font-size: .73rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    /* Charts */
+
+    .chart-container {
+        position: relative;
+        height: 310px;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .chart-container canvas {
+        max-width: 100%;
+    }
+
+    .chart-empty {
+        min-height: 180px;
+        display: grid;
+        place-items: center;
+        padding: 20px;
+        text-align: center;
+        color: var(--muted);
+        font-size: .9rem;
+        line-height: 1.6;
+    }
+
+    .chart-empty[hidden] {
+        display: none !important;
+    }
+
+    /* Filters */
+
+    .filter-panel,
+    .table-panel {
+        margin-top: 22px;
+    }
+
+    .filter-form {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        align-items: end;
+    }
+
+    .filter-field {
+        min-width: 0;
+    }
+
+    .filter-field label {
+        display: block;
+        margin-bottom: 7px;
+        font-size: .82rem;
+        font-weight: 700;
+    }
+
+    .filter-field input,
+    .filter-field select {
+        width: 100%;
+        min-height: 43px;
+        padding: 10px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 9px;
+        color: #172033;
+        background: #fff;
+        font: inherit;
+        font-size: .88rem;
+    }
+
+    .filter-field input:focus,
+    .filter-field select:focus {
+        outline: 3px solid #c7d2fe;
+        border-color: var(--primary);
+    }
+
+    .filter-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .btn {
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 42px;
+        padding: 10px 14px;
+        border: 1px solid transparent;
+        border-radius: 9px;
+        cursor: pointer;
+        text-decoration: none;
+        font: inherit;
+        font-size: .85rem;
+        font-weight: 700;
+        transition: background .15s ease;
+    }
+
+    .btn-primary {
+        color: #fff;
+        background: var(--primary);
+    }
+
+    .btn-primary:hover {
+        background: #4338ca;
+    }
+
+    .btn-secondary {
+        color: #334155;
+        background: #fff;
+        border-color: #cbd5e1;
+    }
+
+    .btn-secondary:hover {
+        background: #f8fafc;
+    }
+
+    /* Case table */
+
+    .table-summary {
+        color: var(--muted);
+        font-size: .8rem;
+    }
+
+    .table-summary strong {
+        color: var(--text);
+    }
+
+    .table-wrapper {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .return-table {
+        width: 100%;
+        min-width: 1450px;
+        border-collapse: collapse;
+    }
+
+    .return-table th {
+        padding: 13px 12px;
+        background: #f8fafc;
+        color: #64748b;
+        text-align: left;
+        font-size: .72rem;
+        font-weight: 800;
+        letter-spacing: .035em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .return-table td {
+        padding: 14px 12px;
+        border-bottom: 1px solid #edf2f7;
+        vertical-align: middle;
+        font-size: .82rem;
+    }
+
+    .return-table tbody tr:hover {
+        background: #fafbff;
+    }
+
+    .case-id {
+        font-weight: 800;
+        color: var(--primary);
+    }
+
+    .product-name {
+        font-weight: 700;
+        display: block;
+        max-width: 190px;
+        overflow-wrap: anywhere;
+    }
+
+    .product-id {
+        display: block;
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: .74rem;
+        overflow-wrap: anywhere;
+    }
+
+    .reason-text {
+        display: inline-block;
+        max-width: 180px;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 9px;
+        border-radius: 20px;
+        background: #f1f5f9;
+        color: #475569;
+        font-size: .73rem;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .status-badge::before {
+        content: "";
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        flex-shrink: 0;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    .status-pending,
+    .evidence-weak,
+    .review-pending {
+        background: #fff7ed;
+        color: #c2410c;
+    }
+
+    .status-processing {
+        background: #eff6ff;
+        color: #1d4ed8;
+    }
+
+    .status-analyzed,
+    .evidence-strong,
+    .review-reviewed {
+        background: #ecfdf5;
+        color: #047857;
+    }
+
+    .status-failed,
+    .evidence-insufficient,
+    .review-corrected,
+    .mismatch-yes {
+        background: #fef2f2;
+        color: #b91c1c;
+    }
+
+    .evidence-na,
+    .mismatch-na {
+        background: #f1f5f9;
+        color: #64748b;
+    }
+
+    .details-link {
+        color: var(--primary);
+        font-weight: 800;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    .details-link:hover {
+        text-decoration: underline;
+    }
+
+    .empty-state {
+        padding: 45px 20px;
+        text-align: center;
+    }
+
+    .empty-state h3 {
+        margin: 0 0 8px;
+    }
+
+    .empty-state p {
+        color: var(--muted);
+        font-size: .9rem;
+        line-height: 1.6;
+    }
+
+    /* Workflow */
+
+    .workflow-panel {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 14px;
+        align-items: start;
+        margin-top: 22px;
+        padding: 19px;
+        border: 1px solid #c7d2fe;
+        border-radius: 14px;
+        background: #f5f7ff;
+    }
+
+    .workflow-icon {
+        display: grid;
+        place-items: center;
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        background: #e0e7ff;
+        color: #4338ca;
+        font-size: 1.2rem;
+        font-weight: 800;
+    }
+
+    .workflow-panel h3 {
+        margin: 1px 0 7px;
+        font-size: .95rem;
+    }
+
+    .workflow-panel p {
+        margin: 0;
+        color: #475569;
+        font-size: .85rem;
+        line-height: 1.7;
+    }
+
+    .workflow-steps {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+    }
+
+    .workflow-step {
+        padding: 6px 9px;
+        border: 1px solid #dbe3f4;
+        border-radius: 7px;
+        background: #fff;
+        color: #334155;
+        font-size: .75rem;
+        font-weight: 700;
+    }
+
+    @media (max-width: 1150px) {
+        .stats-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .filter-form {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 760px) {
+        .charts-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .chart-container {
+            height: 300px;
+        }
+
+        .stats-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+
+    @media (max-width: 480px) {
+        .dashboard {
+            padding-top: 16px;
+        }
+
+        .dashboard-header {
+            align-items: flex-start;
+        }
+
+        .stats-grid {
+            gap: 10px;
+        }
+
+        .stat-card {
+            padding: 13px;
+            min-height: 150px;
+        }
+
+        .stat-value {
+            font-size: 1.65rem;
+        }
+
+        .stat-icon {
+            width: 31px;
+            height: 31px;
+        }
+
+        .panel {
+            padding: 15px;
+        }
+
+        .filter-form {
+            grid-template-columns: 1fr;
+        }
+
+        .admin-profile {
+            width: 100%;
+        }
+
+        .workflow-panel {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="dashboard">
+
+    <header class="dashboard-header">
+        <div>
+            <p class="eyebrow">Return Intelligence Platform</p>
+            <h1>Return Insights Dashboard</h1>
+            <p>
+                Investigate return reasons, examine evidence, and track
+                staff verification.
+            </p>
+        </div>
+
+        <div class="admin-profile">
+            <div class="admin-avatar">A</div>
+            <div>
+                <small>Signed in as administrator</small>
+                <strong>{{ current_user.username }}</strong>
+            </div>
+        </div>
+    </header>
+
+    <div class="section-heading">
+        <div>
+            <h2>Request Overview</h2>
+            <p>Counts are taken from the current database records.</p>
+        </div>
+    </div>
+
+    <section class="stats-grid">
+
+        <a class="stat-card stat-link primary"
+           href="{{ url_for('admin_dashboard') }}#caseQueue">
+            <div class="stat-top">
+                <span class="stat-label">Total Requests</span>
+                <span class="stat-icon">#</span>
+            </div>
+            <div class="stat-value">{{ total_requests }}</div>
+            <div class="stat-foot">All recorded return cases</div>
+            <div class="stat-foot">View cases →</div>
+        </a>
+
+        <a class="stat-card stat-link warning"
+           href="{{ url_for('admin_dashboard', status='Pending') }}#caseQueue">
+            <div class="stat-top">
+                <span class="stat-label">Pending Analysis</span>
+                <span class="stat-icon">!</span>
+            </div>
+            <div class="stat-value">{{ pending_count }}</div>
+            <div class="stat-foot">Awaiting analysis workflow</div>
+            <div class="stat-foot">View pending cases →</div>
+        </a>
+
+        <a class="stat-card stat-link success"
+           href="{{ url_for('admin_dashboard', status='Analyzed') }}#caseQueue">
+            <div class="stat-top">
+                <span class="stat-label">Analyzed Requests</span>
+                <span class="stat-icon">✓</span>
+            </div>
+            <div class="stat-value">{{ analyzed_count }}</div>
+            <div class="stat-foot">Marked analyzed in the database</div>
+            <div class="stat-foot">View analyzed cases →</div>
+        </a>
+
+        <a class="stat-card stat-link"
+           href="{{ url_for('admin_dashboard') }}#caseQueue">
+            <div class="stat-top">
+                <span class="stat-label">Unique Customers</span>
+                <span class="stat-icon">U</span>
+            </div>
+            <div class="stat-value">{{ customer_count }}</div>
+            <div class="stat-foot">Customers with recorded requests</div>
+            <div class="stat-foot">View cases →</div>
+        </a>
+
+        <article class="stat-card">
+            <div class="stat-top">
+                <span class="stat-label">Distinct Products</span>
+                <span class="stat-icon">P</span>
+            </div>
+            <div class="stat-value">{{ product_count }}</div>
+            <div class="stat-foot">Products with return requests</div>
+        </article>
+
+        <a class="stat-card stat-link success"
+           href="{{ url_for('admin_dashboard', evidence='Strong') }}#caseQueue">
+            <div class="stat-top">
+                <span class="stat-label">Strong Evidence</span>
+                <span class="stat-icon">S</span>
+            </div>
+            <div class="stat-value">{{ strong_evidence_count }}</div>
+            <div class="stat-foot">Cases with a saved strong-evidence assessment</div>
+            <div class="stat-foot">View matching cases →</div>
+        </a>
+
+        <a class="stat-card stat-link warning"
+           href="{{ url_for('admin_dashboard', evidence='Weak') }}#caseQueue">
+            <div class="stat-top">
+                <span class="stat-label">Weak Evidence</span>
+                <span class="stat-icon">W</span>
+            </div>
+            <div class="stat-value">{{ weak_evidence_count }}</div>
+            <div class="stat-foot">Cases that may need closer investigation</div>
+            <div class="stat-foot">View matching cases →</div>
+        </a>
+
+        <a class="stat-card stat-link danger"
+           href="{{ url_for('admin_dashboard', evidence='Insufficient') }}#caseQueue">
+            <div class="stat-top">
+                <span class="stat-label">Insufficient Evidence</span>
+                <span class="stat-icon">?</span>
+            </div>
+            <div class="stat-value">{{ insufficient_evidence_count }}</div>
+            <div class="stat-foot">Not enough evidence for a clear assessment</div>
+            <div class="stat-foot">View matching cases →</div>
+        </a>
+
+        <a class="stat-card stat-link info"
+           href="{{ url_for('admin_dashboard', review='Reviewed') }}#caseQueue">
+            <div class="stat-top">
+                <span class="stat-label">Reviewed Cases</span>
+                <span class="stat-icon">✓</span>
+            </div>
+            <div class="stat-value">{{ reviewed_count }}</div>
+            <div class="stat-foot">Reviewed or corrected by staff</div>
+            <div class="stat-foot">View matching cases →</div>
+        </a>
+
+        <a class="stat-card stat-link danger"
+           href="{{ url_for('admin_dashboard', mismatch='yes') }}#caseQueue">
+            <div class="stat-top">
+                <span class="stat-label">Reason Mismatches</span>
+                <span class="stat-icon">≠</span>
+            </div>
+            <div class="stat-value">{{ mismatch_count }}</div>
+            <div class="stat-foot">
+                Staff-confirmed reason differs from customer selection
+            </div>
+            <div class="stat-foot">View mismatches →</div>
+        </a>
+
+    </section>
+
+    <div class="section-heading">
+        <div>
+            <h2>Evidence and Reason Analytics</h2>
+            <p>
+                Understand submitted reasons, analysis status, and completed
+                staff comparisons.
+            </p>
+        </div>
+    </div>
+
+    <section class="charts-grid">
+
+        <article class="panel">
+            <div class="panel-heading">
+                <div>
+                    <h3>Analysis Status</h3>
+                    <p>Current processing status of return requests.</p>
+                </div>
+                <span class="panel-tag">Database counts</span>
+            </div>
+            <div class="chart-container" id="statusChartContainer">
+                <canvas id="statusChart"></canvas>
+            </div>
+            <div id="statusChartEmpty" class="chart-empty" hidden>
+                No return requests recorded yet.
+            </div>
+        </article>
+
+        <article class="panel">
+            <div class="panel-heading">
+                <div>
+                    <h3>Evidence Strength</h3>
+                    <p>Cases with a saved evidence assessment.</p>
+                </div>
+                <span class="panel-tag">Assessment records</span>
+            </div>
+            <div class="chart-container" id="evidenceChartContainer">
+                <canvas id="evidenceChart"></canvas>
+            </div>
+            <div id="evidenceChartEmpty" class="chart-empty" hidden>
+                No evidence assessments have been saved yet.
+            </div>
+        </article>
+
+        <article class="panel">
+            <div class="panel-heading">
+                <div>
+                    <h3>Customer-Selected Reasons</h3>
+                    <p>Reasons entered when customers submitted requests.</p>
+                </div>
+                <span class="panel-tag">Customer input</span>
+            </div>
+            <div class="chart-container" id="reasonChartContainer">
+                <canvas id="reasonChart"></canvas>
+            </div>
+            <div id="reasonChartEmpty" class="chart-empty" hidden>
+                No customer-selected reason data is available.
+            </div>
+        </article>
+
+        <article class="panel">
+            <div class="panel-heading">
+                <div>
+                    <h3>Selected vs Staff-Confirmed Reasons</h3>
+                    <p>
+                        Compares customer selection with the reason confirmed
+                        by staff.
+                    </p>
+                </div>
+                <span class="panel-tag">Verified cases only</span>
+            </div>
+            <div class="chart-container" id="comparisonChartContainer">
+                <canvas id="comparisonChart"></canvas>
+            </div>
+            <div id="comparisonChartEmpty" class="chart-empty" hidden>
+                No staff-confirmed reasons are available yet.
+            </div>
+        </article>
+
+    </section>
+
+    <section class="panel filter-panel">
+        <div class="panel-heading">
+            <div>
+                <h3>Find and Prioritize Cases</h3>
+                <p>
+                    Filter by evidence strength, review progress, or reason
+                    mismatch.
+                </p>
+            </div>
+        </div>
+
+        <form method="GET" action="{{ url_for('admin_dashboard') }}">
+            <div class="filter-form">
+
+                <div class="filter-field">
+                    <label for="q">Search</label>
+                    <input type="text" id="q" name="q"
+                           maxlength="200"
+                           value="{{ search_text }}"
+                           placeholder="Product name, ID, or comment">
+                </div>
+
+                <div class="filter-field">
+                    <label for="reason">Customer-selected reason</label>
+                    <select id="reason" name="reason">
+                        <option value="">All Reasons</option>
+                        {% for reason_option in return_reasons %}
+                            <option value="{{ reason_option }}"
+                                {% if selected_reason == reason_option %}selected{% endif %}>
+                                {{ reason_option }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="filter-field">
+                    <label for="status">Analysis status</label>
+                    <select id="status" name="status">
+                        <option value="">All Statuses</option>
+                        {% for status_option in analysis_statuses %}
+                            <option value="{{ status_option }}"
+                                {% if selected_status == status_option %}selected{% endif %}>
+                                {{ status_option }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="filter-field">
+                    <label for="evidence">Evidence strength</label>
+                    <select id="evidence" name="evidence">
+                        <option value="">All Evidence Levels</option>
+                        {% for evidence_option in evidence_levels %}
+                            <option value="{{ evidence_option }}"
+                                {% if selected_evidence == evidence_option %}selected{% endif %}>
+                                {{ evidence_option }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="filter-field">
+                    <label for="review">Staff review status</label>
+                    <select id="review" name="review">
+                        <option value="">All Review Statuses</option>
+                        {% for review_option in review_statuses %}
+                            <option value="{{ review_option }}"
+                                {% if selected_review == review_option %}selected{% endif %}>
+                                {{ review_option }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="filter-field">
+                    <label for="mismatch">Reason comparison</label>
+                    <select id="mismatch" name="mismatch">
+                        <option value="">All Cases</option>
+                        <option value="yes"
+                            {% if selected_mismatch == 'yes' %}selected{% endif %}>
+                            Reason mismatch
+                        </option>
+                        <option value="no"
+                            {% if selected_mismatch == 'no' %}selected{% endif %}>
+                            Reasons match
+                        </option>
+                    </select>
+                </div>
+
+                <div class="filter-actions">
+                    <button type="submit" class="btn btn-primary">
+                        Apply Filters
+                    </button>
+                    <a href="{{ url_for('admin_dashboard') }}"
+                       class="btn btn-secondary">
+                        Reset
+                    </a>
+                </div>
+
+            </div>
+        </form>
+    </section>
+
+    <section class="panel table-panel" id="caseQueue">
+        <div class="panel-heading">
+            <div>
+                <h3>Return Case Queue</h3>
+                <p>
+                    Weak and insufficient evidence assessments are prioritized
+                    first when available.
+                </p>
+            </div>
+            <div class="table-summary">
+                <strong>{{ cases | length }}</strong>
+                case(s) shown, up to 200
+            </div>
+        </div>
+
+        {% if cases %}
+            <div class="table-wrapper">
+                <table class="return-table">
+                    <thead>
+                        <tr>
+                            <th>Case</th>
+                            <th>Product</th>
+                            <th>Customer</th>
+                            <th>Customer-Selected Reason</th>
+                            <th>AI-Suggested Reason</th>
+                            <th>Evidence Strength</th>
+                            <th>Staff-Confirmed Reason</th>
+                            <th>Review Status</th>
+                            <th>Comparison</th>
+                            <th>Analysis Status</th>
+                            <th>Submitted</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for case in cases %}
+                            {% set analysis = case.analysis %}
+                            {% set evidence = analysis.evidence_strength if analysis else none %}
+                            {% set review = analysis.review_status if analysis else none %}
+                            {% set verified_reason = analysis.verified_reason if analysis else none %}
+                            {% set predicted_reason = analysis.predicted_reason if analysis else none %}
+                            {% set is_mismatch = verified_reason and verified_reason != case.selected_reason %}
+
+                            <tr>
+                                <td>
+                                    <span class="case-id">#{{ case.id }}</span>
+                                </td>
+
+                                <td>
+                                    <span class="product-name">{{ case.product_name }}</span>
+                                    <span class="product-id">{{ case.product_id }}</span>
+                                </td>
+
+                                <td>
+                                    {{ case.user.username if case.user else 'Unknown' }}
+                                </td>
+
+                                <td>
+                                    <span class="reason-text">{{ case.selected_reason }}</span>
+                                </td>
+
+                                <td>
+                                    {% if predicted_reason %}
+                                        <span class="reason-text">{{ predicted_reason }}</span>
+                                    {% else %}
+                                        <span class="status-badge evidence-na">Not assessed</span>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {% if evidence %}
+                                        {% set evidence_class = {
+                                            'Strong': 'evidence-strong',
+                                            'Weak': 'evidence-weak',
+                                            'Insufficient': 'evidence-insufficient'
+                                        }.get(evidence, 'evidence-na') %}
+                                        <span class="status-badge {{ evidence_class }}">
+                                            {{ evidence }}
+                                        </span>
+                                    {% else %}
+                                        <span class="status-badge evidence-na">Not assessed</span>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {% if verified_reason %}
+                                        <span class="reason-text">{{ verified_reason }}</span>
+                                    {% else %}
+                                        <span class="status-badge evidence-na">Not verified</span>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {% if review %}
+                                        {% set review_class = {
+                                            'Pending': 'review-pending',
+                                            'Reviewed': 'review-reviewed',
+                                            'Corrected': 'review-corrected'
+                                        }.get(review, 'evidence-na') %}
+                                        <span class="status-badge {{ review_class }}">
+                                            {{ review }}
+                                        </span>
+                                    {% else %}
+                                        <span class="status-badge review-pending">Pending</span>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {% if verified_reason %}
+                                        {% if is_mismatch %}
+                                            <span class="status-badge mismatch-yes">Mismatch</span>
+                                        {% else %}
+                                            <span class="status-badge review-reviewed">Match</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="status-badge mismatch-na">Awaiting review</span>
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    {% set status_class = {
+                                        'Pending': 'status-pending',
+                                        'Processing': 'status-processing',
+                                        'Analyzed': 'status-analyzed',
+                                        'Failed': 'status-failed'
+                                    }.get(case.analysis_status, '') %}
+                                    <span class="status-badge {{ status_class }}">
+                                        {{ case.analysis_status }}
+                                    </span>
+                                </td>
+
+                                <td>
+                                    {% if case.created_at %}
+                                        {{ case.created_at.strftime('%d %b %Y, %I:%M %p') }}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+
+                                <td>
+                                    <a class="details-link"
+                                       href="{{ url_for('admin_return_details', return_id=case.id) }}">
+                                        Review Case →
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <h3>No return requests found</h3>
+                <p>Try changing your filters or reset them to see all cases.</p>
+                <p>
+                    <a class="btn btn-secondary"
+                       href="{{ url_for('admin_dashboard') }}">
+                        Clear Filters
+                    </a>
+                </p>
+            </div>
+        {% endif %}
+    </section>
+
+    <section class="workflow-panel">
+        <div class="workflow-icon">i</div>
+        <div>
+            <h3>How Return Insight AI works</h3>
+            <p>
+                The customer-selected reason is the starting point, not the
+                confirmed actual reason. The AI module examines submitted text
+                and images to estimate a likely reason and identify supporting
+                or conflicting evidence. Staff must inspect the case and record
+                the confirmed reason separately. Evidence strength does not
+                automatically establish whether the customer's reason is
+                correct, and this system does not decide return eligibility.
+            </p>
+            <div class="workflow-steps">
+                <span class="workflow-step">1. Customer submission</span>
+                <span class="workflow-step">2. AI evidence assessment</span>
+                <span class="workflow-step">3. Prioritize uncertain cases</span>
+                <span class="workflow-step">4. Staff verification</span>
+                <span class="workflow-step">5. Compare reasons</span>
+            </div>
+        </div>
+    </section>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    "use strict";
+
+    const statusLabels = [
+        "Pending",
+        "Analyzed",
+        "Processing",
+        "Failed"
+    ];
+
+    const statusValues = [
+        {{ pending_count | tojson }},
+        {{ analyzed_count | tojson }},
+        {{ processing_count | tojson }},
+        {{ failed_count | tojson }}
+    ];
+
+    const evidenceLabels = [
+        "Strong",
+        "Weak",
+        "Insufficient"
+    ];
+
+    const evidenceValues = [
+        {{ strong_evidence_count | tojson }},
+        {{ weak_evidence_count | tojson }},
+        {{ insufficient_evidence_count | tojson }}
+    ];
+
+    const reasonLabels = {{ reason_labels | tojson }};
+    const reasonValues = {{ reason_values | tojson }};
+
+    const comparisonLabels = {{ comparison_labels | tojson }};
+    const customerComparisonValues = {{ customer_comparison_values | tojson }};
+    const staffComparisonValues = {{ staff_comparison_values | tojson }};
+
+    const chartPalette = [
+        "#6366f1",
+        "#06b6d4",
+        "#f59e0b",
+        "#10b981",
+        "#ec4899",
+        "#8b5cf6",
+        "#f97316",
+        "#14b8a6"
+    ];
+
+    function showEmpty(canvasId, emptyId) {
+        const canvas = document.getElementById(canvasId);
+        const empty = document.getElementById(emptyId);
+
+        if (canvas) canvas.hidden = true;
+        if (empty) empty.hidden = false;
+    }
+
+    function showChart(canvasId, emptyId) {
+        const canvas = document.getElementById(canvasId);
+        const empty = document.getElementById(emptyId);
+
+        if (canvas) canvas.hidden = false;
+        if (empty) empty.hidden = true;
+    }
+
+    function normalizeValues(values) {
+        if (!Array.isArray(values)) return [];
+        return values.map(function (value) {
+            const number = Number(value);
+            return Number.isFinite(number) && number >= 0 ? number : 0;
+        });
+    }
+
+    /*
+     * Print the value above each bar.
+     * Zero values are deliberately included.
+     */
+    const valueLabelsPlugin = {
+        id: "valueLabels",
+
+        afterDatasetsDraw(chart) {
+            const ctx = chart.ctx;
+            const chartArea = chart.chartArea;
+
+            if (!chartArea) return;
+
+            ctx.save();
+            ctx.font = "600 11px Arial";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "bottom";
+            ctx.fillStyle = "#374151";
+
+            chart.data.datasets.forEach(function (dataset, datasetIndex) {
+                const meta = chart.getDatasetMeta(datasetIndex);
+
+                if (meta.hidden) return;
+
+                meta.data.forEach(function (bar, index) {
+                    const value = dataset.data[index];
+
+                    if (value === null || value === undefined) return;
+
+                    const position = bar.getProps(["x", "y"], true);
+
+                    /*
+                     * Keep the label inside the chart area.
+                     * For a zero-height bar, the label remains visible
+                     * just above the baseline.
+                     */
+                    const labelY = Math.max(
+                        chartArea.top + 13,
+                        Math.min(position.y - 5, chartArea.bottom - 2)
+                    );
+
+                    ctx.fillText(String(value), position.x, labelY);
+                });
+            });
+
+            ctx.restore();
+        }
+    };
+
+    function createDoughnut(canvasId, emptyId, labels, rawValues) {
+        const canvas = document.getElementById(canvasId);
+
+        if (!canvas || typeof Chart === "undefined") {
+            showEmpty(canvasId, emptyId);
+            return;
+        }
+
+        const values = normalizeValues(rawValues);
+
+        /*
+         * Keep the chart visible even when all values are zero.
+         * Chart.js will display the legend and the zero-valued dataset.
+         */
+        showChart(canvasId, emptyId);
+
+        const total = values.reduce(function (sum, value) {
+            return sum + value;
+        }, 0);
+
+        new Chart(canvas, {
+            type: "doughnut",
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: [
+                        "#6366f1",
+                        "#10b981",
+                        "#f59e0b",
+                        "#ef4444",
+                        "#06b6d4",
+                        "#8b5cf6"
+                    ],
+                    borderColor: "#ffffff",
+                    borderWidth: 3,
+                    hoverOffset: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: "62%",
+                plugins: {
+                    legend: {
+                        position: "bottom",
+                        labels: {
+                            usePointStyle: true,
+                            padding: 16
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function (context) {
+                                const value = Number(context.raw || 0);
+                                const percent = total
+                                    ? (value / total * 100).toFixed(1)
+                                    : "0.0";
+
+                                return `${context.label}: ${value} (${percent}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function createVerticalBar(
+        canvasId,
+        emptyId,
+        labels,
+        rawValues
+    ) {
+        const canvas = document.getElementById(canvasId);
+
+        if (!canvas || typeof Chart === "undefined") {
+            showEmpty(canvasId, emptyId);
+            return;
+        }
+
+        const values = normalizeValues(rawValues);
+
+        if (!Array.isArray(labels) || labels.length === 0) {
+            showEmpty(canvasId, emptyId);
+            return;
+        }
+
+        showChart(canvasId, emptyId);
+
+        const colors = labels.map(function (_, index) {
+            return chartPalette[index % chartPalette.length];
+        });
+
+        const maximum = Math.max(0, ...values);
+
+        new Chart(canvas, {
+            type: "bar",
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: "Customer requests",
+                    data: values,
+                    backgroundColor: colors,
+                    borderColor: colors,
+                    borderWidth: 1,
+                    borderRadius: 6,
+                    borderSkipped: false,
+                    maxBarThickness: 48
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: {
+                    padding: {
+                        top: 24,
+                        left: 5,
+                        right: 8
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function (context) {
+                                return `Customer requests: ${context.raw}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            color: "#4b5563",
+                            autoSkip: false,
+                            maxRotation: 35,
+                            minRotation: 0
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        suggestedMax: maximum === 0 ? 1 : undefined,
+                        ticks: {
+                            precision: 0,
+                            stepSize: 1,
+                            color: "#6b7280"
+                        },
+                        grid: {
+                            color: "rgba(148, 163, 184, 0.18)"
+                        }
+                    }
+                }
+            },
+            plugins: [valueLabelsPlugin]
+        });
+    }
+
+    function createComparisonBar(
+        canvasId,
+        emptyId,
+        labels,
+        rawCustomerValues,
+        rawStaffValues
+    ) {
+        const canvas = document.getElementById(canvasId);
+
+        if (!canvas || typeof Chart === "undefined") {
+            showEmpty(canvasId, emptyId);
+            return;
+        }
+
+        if (!Array.isArray(labels) || labels.length === 0) {
+            showEmpty(canvasId, emptyId);
+            return;
+        }
+
+        const customerValues = normalizeValues(rawCustomerValues);
+        const staffValues = normalizeValues(rawStaffValues);
+
+        /*
+         * Do not hide this chart just because the counts are zero.
+         * All return-reason categories must always remain visible.
+         */
+        showChart(canvasId, emptyId);
+
+        const maximum = Math.max(
+            0,
+            ...customerValues,
+            ...staffValues
+        );
+
+        new Chart(canvas, {
+            type: "bar",
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: "Customer-stated",
+                        data: customerValues,
+                        backgroundColor: "#3b82f6",
+                        borderColor: "#2563eb",
+                        borderWidth: 1,
+                        borderRadius: 5,
+                        borderSkipped: false,
+                        maxBarThickness: 34
+                    },
+                    {
+                        label: "Staff-confirmed",
+                        data: staffValues,
+                        backgroundColor: "#f59e0b",
+                        borderColor: "#d97706",
+                        borderWidth: 1,
+                        borderRadius: 5,
+                        borderSkipped: false,
+                        maxBarThickness: 34
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: {
+                    padding: {
+                        top: 25,
+                        left: 8,
+                        right: 8
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: "top",
+                        labels: {
+                            usePointStyle: true,
+                            pointStyle: "rectRounded",
+                            padding: 16,
+                            color: "#374151"
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function (context) {
+                                return `${context.dataset.label}: ${context.raw}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            color: "#4b5563",
+                            autoSkip: false,
+                            maxRotation: 35,
+                            minRotation: 0
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        suggestedMax: maximum === 0 ? 1 : undefined,
+                        ticks: {
+                            precision: 0,
+                            stepSize: 1,
+                            color: "#6b7280"
+                        },
+                        grid: {
+                            color: "rgba(148, 163, 184, 0.18)"
+                        }
+                    }
+                }
+            },
+            plugins: [valueLabelsPlugin]
+        });
+    }
+
+    if (typeof Chart === "undefined") {
+        showEmpty("statusChart", "statusChartEmpty");
+        showEmpty("evidenceChart", "evidenceChartEmpty");
+        showEmpty("reasonChart", "reasonChartEmpty");
+        showEmpty("comparisonChart", "comparisonChartEmpty");
+
+        console.error(
+            "Chart.js did not load. Check your internet connection."
+        );
+        return;
+    }
+
+    createDoughnut(
+        "statusChart",
+        "statusChartEmpty",
+        statusLabels,
+        statusValues
+    );
+
+    createDoughnut(
+        "evidenceChart",
+        "evidenceChartEmpty",
+        evidenceLabels,
+        evidenceValues
+    );
+
+    createVerticalBar(
+        "reasonChart",
+        "reasonChartEmpty",
+        reasonLabels,
+        reasonValues
+    );
+
+    createComparisonBar(
+        "comparisonChart",
+        "comparisonChartEmpty",
+        comparisonLabels,
+        customerComparisonValues,
+        staffComparisonValues
+    );
+});
+</script>
+
+{% endblock %}
