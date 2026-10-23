@@ -685,6 +685,67 @@
         color: #fff;
     }
 
+
+    /* Delete button: preserve the existing page design */
+    .case-button-danger {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 42px;
+        padding: 11px 17px;
+        border: 1px solid #b91c1c;
+        border-radius: 10px;
+        background: #b91c1c;
+        color: #ffffff;
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 800;
+        line-height: 1.4;
+        cursor: pointer;
+        transition: background .18s ease, transform .18s ease;
+    }
+
+    .case-button-danger:hover:not(:disabled) {
+        background: #991b1b;
+        border-color: #991b1b;
+        color: #ffffff;
+    }
+
+    .case-button-danger:focus-visible {
+        outline: 3px solid rgba(185, 28, 28, .25);
+        outline-offset: 3px;
+    }
+
+    .case-button-danger:disabled {
+        opacity: .55;
+        cursor: not-allowed;
+        box-shadow: none;
+    }
+
+    .case-danger-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 16px;
+    }
+
+    .case-danger-footer form {
+        margin: 0;
+    }
+
+    @media (max-width: 420px) {
+        .case-danger-footer {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .case-danger-footer .case-button {
+            width: 100%;
+        }
+    }
+
     .case-button-secondary {
         background: #fff;
         border-color: #dce1e9;
@@ -829,6 +890,10 @@
             </span>
         </div>
     </header>
+
+    
+    
+    
 
     <!-- Request information -->
     <div class="case-grid">
@@ -1233,6 +1298,7 @@
                 </a>
             </div>
         </form>
+        
 
         {% if analysis and analysis.verified_reason %}
             <div class="case-review-result">
@@ -1293,6 +1359,58 @@
                     </div>
                 {% endif %}
             </div>
+        {% endif %}
+    </section>
+
+    <!-- Footer Danger Zone -->
+    <section class="case-card" style="border-color: #fecaca; background: #fffafa;">
+        <div class="case-section-heading">
+            <div class="case-section-icon"
+                 aria-hidden="true"
+                 style="background: #fee2e2; color: #dd7878;">
+                ⚠
+            </div>
+            <div>
+                <h2 style="color: #980101;">Danger Zone</h2>
+                <p>
+                    Permanently delete this return case, its associated
+                    analysis, and uploaded images.
+                </p>
+            </div>
+        </div>
+
+        <div class="case-danger-footer">
+            <p class="case-muted" style="max-width: 700px;">
+                <strong style="color: #991b1b;">Warning:</strong>
+                This action cannot be undone.
+            </p>
+
+            <form
+                method="POST"
+                action="{{ url_for('delete_return_case', return_id=return_request.id) }}"
+                onsubmit="return window.confirm('Are you sure you want to permanently delete Return Case #{{ return_request.id }}? Its associated analysis and images will also be deleted. This action cannot be undone.');"
+            >
+                <input
+                    type="hidden"
+                    name="csrf_token"
+                    value="{{ csrf_token() }}"
+                >
+
+                <button
+                    type="submit"
+                    class="case-button case-button-danger"
+                    {% if current_status|lower == 'processing' %}disabled{% endif %}
+                >
+                    <span aria-hidden="true">🗑</span>
+                    Delete Product &amp; Record
+                </button>
+            </form>
+        </div>
+
+        {% if current_status|lower == 'processing' %}
+            <p class="case-muted" style="margin-top: 12px;">
+                Deletion is disabled while AI analysis is processing.
+            </p>
         {% endif %}
     </section>
 
