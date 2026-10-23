@@ -14,6 +14,7 @@ from gemini_reasoner import (
 
 logger = logging.getLogger(__name__)
 
+
 # ---------------------------------------------------------
 # CONFIGURATION
 # ---------------------------------------------------------
@@ -80,8 +81,6 @@ def get_supabase_client():
 
 
 def get_supabase_bucket_name():
-    """Get the configured Supabase Storage bucket."""
-
     return (
         os.environ.get(
             "SUPABASE_STORAGE_BUCKET",
@@ -92,7 +91,7 @@ def get_supabase_bucket_name():
 
 
 def _safe_storage_name(image_record):
-    """Accept only a safe filename as the Storage object key."""
+    """Accept only a filename as the Storage object key."""
 
     if not image_record:
         return None
@@ -163,8 +162,6 @@ def _download_image_from_supabase(storage_name):
 # ---------------------------------------------------------
 
 def _is_valid_image_file(image_path):
-    """Check whether a local file contains a readable image."""
-
     if not image_path or not os.path.isfile(image_path):
         return False
 
@@ -186,8 +183,6 @@ def _is_valid_image_file(image_path):
 
 
 def _validate_image_bytes(image_bytes):
-    """Validate downloaded bytes before caching them."""
-
     if not image_bytes:
         return False
 
@@ -209,7 +204,7 @@ def _validate_image_bytes(image_bytes):
 
 
 def _cache_supabase_image(image_bytes, destination_path):
-    """Validate and atomically cache an image downloaded from Supabase."""
+    """Validate and atomically cache a downloaded image."""
 
     if not image_bytes or not destination_path:
         return None
@@ -269,11 +264,7 @@ def _cache_supabase_image(image_bytes, destination_path):
 
 
 def get_image_path(image_record, upload_folder):
-    """
-    Resolve an image using local storage first, then Supabase.
-
-    Only safe filenames inside the configured upload folder are accepted.
-    """
+    """Resolve an image locally first, then recover it from Supabase."""
 
     if not image_record or not upload_folder:
         return None
@@ -329,12 +320,10 @@ def get_image_path(image_record, upload_folder):
 
 
 # ---------------------------------------------------------
-# RETURN-REASON HELPERS
+# RETURN-REASON AND TEXT HELPERS
 # ---------------------------------------------------------
 
 def _get_valid_reasons(return_reasons):
-    """Keep supported return reasons in the supplied order."""
-
     source = (
         return_reasons
         if return_reasons is not None
@@ -353,7 +342,10 @@ def _get_valid_reasons(return_reasons):
 
         reason = reason.strip()
 
-        if reason in DEFAULT_RETURN_REASONS and reason not in seen:
+        if (
+            reason in DEFAULT_RETURN_REASONS
+            and reason not in seen
+        ):
             valid_reasons.append(reason)
             seen.add(reason)
 
@@ -361,7 +353,7 @@ def _get_valid_reasons(return_reasons):
 
 
 def _as_text(value):
-    """Convert AI output into text for database Text columns."""
+    """Convert AI output to readable text for database Text columns."""
 
     if value is None:
         return ""
@@ -371,12 +363,40 @@ def _as_text(value):
 
     if isinstance(value, (list, tuple, set)):
         return "\n".join(
-            str(item).strip()
-            for item in value
-            if str(item).strip()
+            text for item in value
+            if (text := _as_text(item))
         )
 
-    return str(value)
+    return str(value).strip()
+
+
+def _as_list(value):
+    """Avoid iterating over individual characters in string results."""
+
+    if value is None:
+        return []
+
+    if isinstance(value, str):
+        text = value.strip()
+
+        if not text:
+            return []
+
+        lines = [
+            line.strip().lstrip("-• ").strip()
+            for line in text.splitlines()
+            if line.strip()
+        ]
+
+        return lines or [text]
+
+    if isinstance(value, (list, tuple)):
+        return [
+            text for item in value
+            if (text := _as_text(item))
+        ]
+
+    return [_as_text(value)]
 
 
 def _safe_historical_cases(similar_cases):
@@ -428,16 +448,21 @@ def analyze_return_request(
     similar_cases=None,
 ):
     """
-    Analyze a return case using Gemini's text and image capabilities.
+    Analyse a return case with Gemini.
 
-    The public function signature and returned dictionary remain
-    compatible with the existing app.py workflow.
-
-    No local PyTorch, Transformers, or CLIP model is loaded.
+    Important:
+    - Gemini/API failures are raised to app.py.
+    - No placeholder prediction is returned after a failure.
+    - Unsupported model output is rejected rather than presented
+      as a valid prediction.
+    - Customer and staff reason fields are never modified.
     """
 
     valid_reasons = _get_valid_reasons(return_reasons)
-    similar_cases = _safe_historical_cases(similar_cases or [])
+
+    similar_cases = _safe_historical_cases(
+        similar_cases or []
+    )
 
     analysis_notes = []
     supporting_evidence = []
@@ -445,13 +470,14 @@ def analyze_return_request(
 
     if similar_cases:
         analysis_notes.append(
-            f"{len(similar_cases)} historical staff-reviewed case(s) "
-            "were supplied as context. They are not proof of the current "
-            "return cause."
+            f"Historical context: {len(similar_cases)} staff-reviewed "
+            "case(s) were available. These examples are context, "
+            "not proof of the current return cause."
         )
     else:
         analysis_notes.append(
-            "No historical staff-reviewed examples were available."
+            "Historical context: no staff-verified comparison cases "
+            "were available."
         )
 
     selected_reason = (
@@ -484,6 +510,14 @@ def analyze_return_request(
             getattr(image_record, "image_type", "") or ""
         ).strip().lower()
 
+        if image_type not in {"listing", "received"}:
+            logger.warning(
+                "Ignoring image with unsupported type %r on case %s.",
+                image_type,
+                getattr(return_request, "id", "unknown"),
+            )
+            continue
+
         image_path = get_image_path(
             image_record,
             upload_folder,
@@ -495,76 +529,76 @@ def analyze_return_request(
 
         if image_type == "listing":
             listing_paths.append(image_path)
-
-        elif image_type == "received":
+        else:
             received_paths.append(image_path)
 
     if listing_paths:
         analysis_notes.append(
-            f"{len(listing_paths)} listing image(s) were retrieved."
+            f"Image availability: {len(listing_paths)} listing/reference "
+            "image(s) were retrieved."
+        )
+    else:
+        analysis_notes.append(
+            "Image availability: no listing/reference image was retrieved."
         )
 
     if received_paths:
         analysis_notes.append(
-            f"{len(received_paths)} received-product image(s) were retrieved."
+            f"Image availability: {len(received_paths)} received-product "
+            "image(s) were retrieved."
+        )
+    else:
+        analysis_notes.append(
+            "Image availability: no received-product image was retrieved."
         )
 
     if unavailable_image_count:
         analysis_notes.append(
-            f"{unavailable_image_count} image(s) could not be retrieved. "
-            "The available evidence may be incomplete."
+            f"Image retrieval warning: {unavailable_image_count} image(s) "
+            "could not be retrieved. The assessment may be incomplete."
         )
 
     if selected_reason:
         analysis_notes.append(
-            f"Customer-selected reason: {selected_reason}. "
-            "This is a customer claim, not a verified conclusion."
+            f"Customer-reported reason: {selected_reason}. "
+            "This is the customer's selection, not an independently "
+            "verified conclusion."
         )
 
     if customer_comment:
-        supporting_evidence.append(
-            "A customer comment was provided for analysis."
+        analysis_notes.append(
+            "Customer explanation: " + customer_comment
         )
     else:
         analysis_notes.append(
-            "No customer comment was provided."
+            "Customer explanation: no additional comment was provided."
         )
-
-    if not listing_paths:
-        analysis_notes.append(
-            "No listing/reference image was available."
-        )
-
-    if not received_paths:
-        analysis_notes.append(
-            "No received-product image was available."
-        )
-
-    # -----------------------------------------------------
-    # GEMINI EVIDENCE ASSESSMENT
-    # -----------------------------------------------------
 
     evidence = {
         "customer_selected_reason": selected_reason or None,
         "customer_comment": customer_comment or None,
         "allowed_return_reasons": valid_reasons,
         "listing_image_available": bool(listing_paths),
+        "listing_image_count": len(listing_paths),
         "received_image_count": len(received_paths),
         "unavailable_image_count": unavailable_image_count,
-        "supporting_evidence": supporting_evidence,
-        "conflicting_evidence": conflicting_evidence,
         "historical_staff_verified_cases": similar_cases,
         "important_note": (
-            "Assess listing and received images directly when available. "
-            "Distinguish visible observations from assumptions. Do not "
-            "invent measurements, product identity, functionality, damage "
-            "causes, or inspection results. Historical cases and customer "
-            "claims are context, not ground truth. Weak, contradictory, "
-            "or insufficient evidence requires human review."
+            "Assess current images directly. Distinguish visible "
+            "observations from assumptions. Do not invent measurements, "
+            "product identity, functionality, damage causes, or inspection "
+            "results. Missing evidence is not proof that a claim is false. "
+            "Keep customer-reason agreement separate from evidence strength. "
+            "A visible defect does not by itself prove what caused it."
         ),
     }
 
-    explanation = None
+    # -----------------------------------------------------
+    # GEMINI CALL
+    # -----------------------------------------------------
+    # Do not catch the exception and continue with a placeholder.
+    # The app.py worker must receive failures so it can mark the
+    # case Failed rather than Analyzed.
 
     try:
         explanation = generate_case_explanation(
@@ -577,149 +611,211 @@ def analyze_return_request(
             similar_cases=similar_cases,
         )
 
-    except Exception as exc:
-        logger.warning(
+    except Exception:
+        logger.exception(
             "Gemini assessment failed for return request %s.",
             getattr(return_request, "id", "unknown"),
-            exc_info=True,
         )
-
-        analysis_notes.append(
-            f"Gemini assessment failed ({type(exc).__name__}). "
-            "A conservative fallback will be returned."
-        )
+        raise
 
     # -----------------------------------------------------
     # VALIDATE GEMINI RESULT
     # -----------------------------------------------------
 
-    if explanation:
-        predicted_reason = explanation.get("predicted_reason")
-        evidence_strength = explanation.get(
-            "evidence_strength",
-            "Insufficient",
+    if not isinstance(explanation, dict) or not explanation:
+        raise ValueError(
+            "Gemini returned no valid structured analysis. "
+            "The case must not be marked Analyzed."
         )
 
-        for item in explanation.get("evidence_for", []):
-            if item:
-                supporting_evidence.append(str(item))
-
-        for item in explanation.get("evidence_against", []):
-            if item:
-                conflicting_evidence.append(str(item))
-
-        if explanation.get("case_summary"):
-            analysis_notes.append(
-                "Gemini case summary: "
-                + _as_text(explanation["case_summary"])
-            )
-
-        alternatives = explanation.get("alternative_explanations", [])
-
-        if alternatives:
-            analysis_notes.append(
-                "Alternative explanations: "
-                + " | ".join(str(item) for item in alternatives)
-            )
-
-        missing = explanation.get("missing_information", [])
-
-        if missing:
-            analysis_notes.append(
-                "Information to verify: "
-                + " | ".join(str(item) for item in missing)
-            )
-
-        if explanation.get("final_assessment"):
-            analysis_notes.append(
-                "Gemini assessment: "
-                + _as_text(explanation["final_assessment"])
-            )
-
-        if explanation.get("recommended_next_action"):
-            analysis_notes.append(
-                "Recommended staff action: "
-                + _as_text(explanation["recommended_next_action"])
-            )
-
-        requires_human_review = explanation.get(
-            "requires_human_review",
-            True,
-        )
-
-    else:
-        # Do not present the customer's own selection as an AI prediction.
-        predicted_reason = (
-            "Other" if "Other" in valid_reasons else valid_reasons[0]
-        )
-
-        evidence_strength = "Insufficient"
-        requires_human_review = True
-
-        analysis_notes.append(
-            "No verified AI prediction is available. The fallback category "
-            "is only a placeholder and must not be treated as an assessment."
-        )
-
-    # -----------------------------------------------------
-    # SAFETY AND APP COMPATIBILITY
-    # -----------------------------------------------------
-
-    if predicted_reason not in valid_reasons:
-        predicted_reason = (
-            "Other" if "Other" in valid_reasons else valid_reasons[0]
-        )
-
-        evidence_strength = "Insufficient"
-        requires_human_review = True
-
-        analysis_notes.append(
-            "An unsupported category was returned; a permitted fallback "
-            "was selected."
-        )
-
-    if evidence_strength not in ALLOWED_EVIDENCE_LEVELS:
-        evidence_strength = "Insufficient"
-        requires_human_review = True
+    predicted_reason = explanation.get("predicted_reason")
 
     if (
-        conflicting_evidence
-        and evidence_strength == "Strong"
+        not isinstance(predicted_reason, str)
+        or predicted_reason.strip() not in valid_reasons
     ):
+        raise ValueError(
+            "Gemini returned a missing or unsupported predicted reason. "
+            "The case must not be marked Analyzed."
+        )
+
+    predicted_reason = predicted_reason.strip()
+
+    evidence_strength = explanation.get(
+        "evidence_strength",
+        "Insufficient",
+    )
+
+    if (
+        not isinstance(evidence_strength, str)
+        or evidence_strength.strip() not in ALLOWED_EVIDENCE_LEVELS
+    ):
+        raise ValueError(
+            "Gemini returned an invalid evidence-strength value. "
+            "The case must not be marked Analyzed."
+        )
+
+    evidence_strength = evidence_strength.strip()
+
+    # -----------------------------------------------------
+    # PROCESS GEMINI RESULT
+    # -----------------------------------------------------
+
+    observations = _as_list(
+        explanation.get("observations")
+    )
+
+    if observations:
+        analysis_notes.append(
+            "Image and evidence observations:\n- "
+            + "\n- ".join(observations)
+        )
+
+    supporting_evidence.extend(
+        _as_list(explanation.get("evidence_for"))
+    )
+
+    conflicting_evidence.extend(
+        _as_list(explanation.get("evidence_against"))
+    )
+
+    case_summary = _as_text(
+        explanation.get("case_summary")
+    )
+
+    if case_summary:
+        analysis_notes.append(
+            "Case summary: " + case_summary
+        )
+
+    alternatives = _as_list(
+        explanation.get("alternative_explanations")
+    )
+
+    if alternatives:
+        analysis_notes.append(
+            "Alternative explanations:\n- "
+            + "\n- ".join(alternatives)
+        )
+
+    missing = _as_list(
+        explanation.get("missing_information")
+    )
+
+    if missing:
+        analysis_notes.append(
+            "Information to verify:\n- "
+            + "\n- ".join(missing)
+        )
+
+    final_assessment = _as_text(
+        explanation.get("final_assessment")
+    )
+
+    if final_assessment:
+        analysis_notes.append(
+            "Evidence assessment: " + final_assessment
+        )
+
+    next_action = _as_text(
+        explanation.get("recommended_next_action")
+    )
+
+    if next_action:
+        analysis_notes.append(
+            "Recommended staff action: " + next_action
+        )
+
+    requires_human_review = explanation.get(
+        "requires_human_review",
+        True,
+    )
+
+    # Do not interpret arbitrary strings such as "false" as False.
+    if not isinstance(requires_human_review, bool):
+        requires_human_review = True
+
+    # -----------------------------------------------------
+    # CONSERVATIVE EVIDENCE VALIDATION
+    # -----------------------------------------------------
+
+    if not supporting_evidence:
+        evidence_strength = "Insufficient"
+        requires_human_review = True
+
+        analysis_notes.append(
+            "Evidence limitation: no specific supporting evidence was "
+            "returned, so the prediction cannot be treated as substantiated."
+        )
+
+    # Material contradictions prevent a Strong rating.
+    if conflicting_evidence and evidence_strength == "Strong":
         evidence_strength = "Weak"
         requires_human_review = True
 
+        analysis_notes.append(
+            "Evidence-strength adjustment: conflicting evidence prevents "
+            "a Strong rating until the contradiction is resolved."
+        )
+
+    # Missing images must not be treated as proof for or against the claim.
     if unavailable_image_count:
         if evidence_strength == "Strong":
             evidence_strength = "Weak"
 
         requires_human_review = True
 
+        analysis_notes.append(
+            "Evidence-strength adjustment: one or more images were "
+            "unavailable, so staff should review the case before relying "
+            "on the AI assessment."
+        )
+
+    # Without a received-product image, Strong visual verification is
+    # not justified by this workflow.
+    if not received_paths and evidence_strength == "Strong":
+        evidence_strength = "Weak"
+        requires_human_review = True
+
+        analysis_notes.append(
+            "Evidence-strength adjustment: no received-product image was "
+            "available. A Strong rating is not justified by this workflow "
+            "without direct evidence of the returned item."
+        )
+
     if not customer_comment and not received_paths:
         evidence_strength = "Insufficient"
         requires_human_review = True
 
-    if requires_human_review:
         analysis_notes.append(
-            "Human review is required before the AI suggestion can be "
-            "treated as a verified return reason."
+            "Evidence limitation: neither a customer comment nor a "
+            "retrieved received-product image was available."
         )
 
-    # Gemini does not provide a calibrated probability in this workflow.
-    # Keep this numeric field for compatibility with the existing dashboard.
-    confidence = 0.0
+    if evidence_strength == "Insufficient":
+        requires_human_review = True
 
-    analysis_notes.append(
-        "Dashboard confidence score is unavailable (0.0). This version "
-        "does not use a local classifier or claim a calibrated probability."
-    )
+    if requires_human_review:
+        analysis_notes.append(
+            "Staff decision required: verify the relevant evidence before "
+            "treating the AI suggestion as the confirmed return reason."
+        )
+    else:
+        analysis_notes.append(
+            "Review note: the available evidence was assessed as Strong, "
+            "but the AI recommendation is still not a staff-verified result."
+        )
+
+    # This workflow does not calculate a calibrated probability.
+    confidence = 0.0
 
     model_version = (
         f"Reasoning: {GEMINI_MODEL_NAME}; "
         "Image analysis: Gemini vision; "
         f"Historical examples: {len(similar_cases)}; "
         "Image storage: local/Supabase fallback; "
-        "Local models: disabled"
+        "Local models: disabled; "
+        "Probability calibration: unavailable"
     )
 
     # Do not modify customer-selected or staff-verified database fields.

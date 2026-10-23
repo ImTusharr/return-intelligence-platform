@@ -1047,34 +1047,35 @@
                 <div class="case-analysis-item">
                     <h3>Model confidence</h3>
 
-                    {% if analysis.confidence is not none %}
-                        {% set confidence_value = [0, [analysis.confidence|float, 100]|min]|max %}
+                    {% if analysis.confidence is not none and analysis.confidence|float > 0 %}
+                        {% set confidence_value = analysis.confidence|float %}
 
                         <div class="case-confidence">
                             <span class="case-confidence-number">
-                                {{ "%.2f"|format(confidence_value) }}%
+                                {{ "%.1f"|format(confidence_value) }}%
                             </span>
                             <span class="case-muted">Model score</span>
                         </div>
 
                         <div class="case-confidence-track"
-                             role="progressbar"
-                             aria-label="Model confidence"
-                             aria-valuemin="0"
-                             aria-valuemax="100"
-                             aria-valuenow="{{ confidence_value }}">
+                            role="progressbar"
+                            aria-label="Model confidence"
+                            aria-valuemin="0"
+                            aria-valuemax="100"
+                            aria-valuenow="{{ confidence_value }}">
                             <div class="case-confidence-fill"
-                                 style="width: {{ confidence_value }}%;">
+                                style="width: {{ confidence_value }}%;">
                             </div>
                         </div>
                     {% else %}
-                        <div class="case-analysis-value">Not available</div>
+                        <div class="case-analysis-value">Not calibrated</div>
+                        <p class="case-field-help">
+                            A calibrated confidence score is not available. Use the evidence
+                            strength and supporting findings to guide the staff investigation.
+                        </p>
                     {% endif %}
-
-                    <p class="case-field-help">
-                        Confidence is a model output, not a guarantee that the prediction is correct.
-                    </p>
                 </div>
+
 
                 <div class="case-analysis-item">
                     <h3>Supporting evidence</h3>
